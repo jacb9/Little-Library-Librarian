@@ -622,16 +622,16 @@
 // ═════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═════════════════════════════════════════════════════════════
-const SUPABASE_URL = 'https://oatcxoizznsnttlerfjo.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreVJynV2be9w_sXYuw1ek';
-const SUPABASE_ENABLED = true;
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_ENABLED = false;
 
 // AI vision extraction — set your endpoint here.
 // Expected to accept { image: base64string } and return { titles: ["Book Title", ...] }
 // See README for a sample Supabase Edge Function using the Anthropic API.
-const EXTRACTION_ENDPOINT = 'https://oatcxoizznsnttlerfjo.supabase.co/functions/v1/extract-titles';
-const EXTRACTION_ENABLED = true;
-  
+const EXTRACTION_ENDPOINT = 'YOUR_EXTRACTION_ENDPOINT';
+const EXTRACTION_ENABLED = false;
+
 let sb = null;
 if (SUPABASE_ENABLED) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -768,7 +768,7 @@ async function loadInventoryEntries(libraryId, container) {
     .select('*')
     .eq('library_id', libraryId)
     .order('created_at', { ascending: false })
-    .limit(10);
+    .limit(3);
 
   if (error || !data || data.length === 0) {
     container.innerHTML = `
@@ -867,13 +867,28 @@ async function runSearch(query) {
   metaDiv.textContent = 'Searching…';
   listDiv.innerHTML = '';
 
-  // Fuzzy search via Postgres trigram/ilike — fetch all inventories and match client-side
-  // for simplicity at this scale; move to a Postgres function (pg_trgm) as data grows.
-  const { data, error } = await sb.from('inventories').select('library_id, titles, created_at');
-  if (error || !data) {
+  // Fuzzy search against only the MOST RECENT scan per library — older scans may no
+  // longer reflect what's actually on the shelf, so they're excluded from search to
+  // avoid sending people on a walk for a book that isn't there anymore.
+  // Fetched newest-first, then reduced client-side to one row per library_id.
+  // Move to a Postgres function (DISTINCT ON + pg_trgm) once data volume grows.
+  const { data: allRows, error } = await sb
+    .from('inventories')
+    .select('library_id, titles, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error || !allRows) {
     metaDiv.textContent = 'Search failed — please try again.';
     return;
   }
+
+  const latestByLibrary = new Map();
+  for (const row of allRows) {
+    if (!latestByLibrary.has(row.library_id)) {
+      latestByLibrary.set(row.library_id, row);
+    }
+  }
+  const data = Array.from(latestByLibrary.values());
 
   const matches = fuzzyMatchTitles(query, data);
 
