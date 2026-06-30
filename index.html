@@ -776,9 +776,11 @@ function initMap() {
   map.on('click', () => { if (activeLibrary) closePanel(); });
 }
 
-function makeMarkerIcon(libId, active = false, searchHit = false) {
+function makeMarkerIcon(lib, active = false, searchHit = false) {
   const classes = ['lfl-marker'];
-  if (inventoriedIds.has(libId)) classes.push('inventoried');
+  // Check both the lib's id and its real DB id (_dbId for user-added libraries)
+  const dbId = lib._dbId || lib.id;
+  if (inventoriedIds.has(dbId) || inventoriedIds.has(lib.id)) classes.push('inventoried');
   if (active) classes.push('active');
   if (searchHit) classes.push('search-hit');
   return L.divIcon({
@@ -792,7 +794,7 @@ function makeMarkerIcon(libId, active = false, searchHit = false) {
 function loadMarkers() {
   clusterGroup.clearLayers();
   libraries.forEach(lib => {
-    const marker = L.marker([lib.lat, lib.lng], { icon: makeMarkerIcon(lib.id) });
+    const marker = L.marker([lib.lat, lib.lng], { icon: makeMarkerIcon(lib) });
     marker.on('click', () => openPanel(lib, marker));
     lib._marker = marker;
     clusterGroup.addLayer(marker);
@@ -802,7 +804,7 @@ function loadMarkers() {
 function refreshMarkerStyle(lib) {
   if (!lib._marker) return;
   const isActive = activeMarker === lib._marker;
-  lib._marker.setIcon(makeMarkerIcon(lib.id, isActive));
+  lib._marker.setIcon(makeMarkerIcon(lib, isActive));
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -812,14 +814,14 @@ function openPanel(lib, marker) {
   if (activeLibrary) refreshMarkerStyle(activeLibrary);
   activeLibrary = lib;
   activeMarker = marker;
-  marker.setIcon(makeMarkerIcon(lib.id, true));
+  marker.setIcon(makeMarkerIcon(lib, true));
 
   document.getElementById('panel-category').textContent =
     (CATEGORY_EMOJI[lib.category] || '📚') + '  ' + (CATEGORY_LABEL[lib.category] || lib.category);
   document.getElementById('panel-name').textContent = lib.name;
 
   const statusEl = document.getElementById('panel-status');
-  const hasInv = inventoriedIds.has(lib.id);
+  const hasInv = inventoriedIds.has(dbId(lib));
   statusEl.textContent = hasInv ? '✓ Inventoried' : '○ Not yet inventoried — be the first to scan it';
   statusEl.className = hasInv ? 'has-inventory' : 'empty';
 
@@ -832,8 +834,8 @@ function openPanel(lib, marker) {
   // Inventory list
   const invList = document.getElementById('inventory-list');
   if (SUPABASE_ENABLED) {
-    loadInventoryEntries(lib.id, invList);
-    loadBoxPhotos(lib.id, boxRow);
+    loadInventoryEntries(dbId(lib), invList);
+    loadBoxPhotos(dbId(lib), boxRow);
   } else {
     invList.innerHTML = `
       <div class="empty-state">
@@ -856,6 +858,12 @@ function closePanel() {
   if (activeLibrary) refreshMarkerStyle(activeLibrary);
   activeMarker = null;
   activeLibrary = null;
+}
+
+function dbId(lib) {
+  // User-added libraries store their real Supabase id in _dbId
+  // Seed libraries use their numeric id directly
+  return lib._dbId || lib.id;
 }
 
 async function loadInventoryEntries(libraryId, container) {
@@ -899,10 +907,11 @@ async function loadBoxPhotos(libraryId, container) {
     .select('*')
     .eq('library_id', libraryId)
     .order('created_at', { ascending: false })
-    .limit(4);
+    .limit(2);
   if (!data || data.length === 0) return;
+  // Replace container entirely with Supabase photos — clears seed photo or placeholder
   const imgs = data.map(p => `<img src="${p.photo_url}" alt="Library box" loading="lazy">`).join('');
-  container.innerHTML = imgs + container.innerHTML;
+  container.innerHTML = imgs;
 }
 
 function escapeHtml(s) {
@@ -1016,7 +1025,7 @@ async function runSearch(query) {
   // Highlight matched libraries on map
   const hitIds = new Set(matches.flatMap(m => m.libraryIds));
   libraries.forEach(lib => {
-    if (lib._marker) lib._marker.setIcon(makeMarkerIcon(lib.id, false, hitIds.has(lib.id)));
+    if (lib._marker) lib._marker.setIcon(makeMarkerIcon(lib, false, hitIds.has(lib.id) || hitIds.has(lib._dbId)));
   });
 
   // Tap a result to jump to map + open nearest matching library
@@ -1322,7 +1331,7 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
 
   try {
     const ext = pendingScanPhoto.name.split('.').pop() || 'jpg';
-    const path = `inventory/${activeLibrary.id}/${Date.now()}.${ext}`;
+    const path = `inventory/${dbId(activeLibrary)}/${Date.now()}.${ext}`;
     const { error: upErr } = await sb.storage.from('lll-photos').upload(path, pendingScanPhoto);
     if (upErr) throw upErr;
     const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
@@ -1331,7 +1340,7 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     const editedCount = extractedTitles.filter(t => t.edited).length;
 
     const { error: dbErr } = await sb.from('inventories').insert({
-      library_id: activeLibrary.id,
+      library_id: dbId(activeLibrary),
       photo_url: urlData.publicUrl,
       titles,
       ai_edited_count: editedCount,
@@ -1339,14 +1348,14 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     });
     if (dbErr) throw dbErr;
 
-    inventoriedIds.add(activeLibrary.id);
+    inventoriedIds.add(dbId(activeLibrary));
     refreshMarkerStyle(activeLibrary);
 
     showToast('Inventory saved — thank you!');
     document.getElementById('scan-modal').classList.remove('open');
 
     const invList = document.getElementById('inventory-list');
-    loadInventoryEntries(activeLibrary.id, invList);
+    loadInventoryEntries(dbId(activeLibrary), invList);
     document.getElementById('panel-status').textContent = '✓ Inventoried';
     document.getElementById('panel-status').className = 'has-inventory';
 
@@ -1399,14 +1408,14 @@ document.getElementById('btn-save-box-photo').addEventListener('click', async ()
   btn.disabled = true;
   try {
     const ext = pendingBoxPhoto.name.split('.').pop() || 'jpg';
-    const path = `box/${activeLibrary.id}/${Date.now()}.${ext}`;
+    const path = `box/${dbId(activeLibrary)}/${Date.now()}.${ext}`;
     const { error: upErr } = await sb.storage.from('lll-photos').upload(path, pendingBoxPhoto);
     if (upErr) throw upErr;
     const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
-    await sb.from('box_photos').insert({ library_id: activeLibrary.id, photo_url: urlData.publicUrl });
+    await sb.from('box_photos').insert({ library_id: dbId(activeLibrary), photo_url: urlData.publicUrl });
     showToast('Photo saved — thanks!');
     document.getElementById('box-photo-modal').classList.remove('open');
-    loadBoxPhotos(activeLibrary.id, document.getElementById('box-photo-row'));
+    loadBoxPhotos(dbId(activeLibrary), document.getElementById('box-photo-row'));
   } catch (err) {
     console.error(err);
     showToast('Could not save — please try again');
@@ -1488,7 +1497,7 @@ document.getElementById('btn-submit-new').addEventListener('click', async () => 
 
     const newLib = { id: libData.id, name, category, lat: newLibraryLatLng.lat, lng: newLibraryLatLng.lng, photo: photoUrl };
     libraries.push(newLib);
-    const marker = L.marker([newLib.lat, newLib.lng], { icon: makeMarkerIcon(newLib.id) });
+    const marker = L.marker([newLib.lat, newLib.lng], { icon: makeMarkerIcon(newLib) });
     marker.on('click', () => openPanel(newLib, marker));
     newLib._marker = marker;
     clusterGroup.addLayer(marker);
@@ -1548,16 +1557,17 @@ async function loadUserAddedLibraries() {
     .order('created_at', { ascending: true });
   if (error || !data) return;
 
-  // Assign negative IDs so they don't collide with libraries.json IDs
-  data.forEach((row, i) => {
+  // Use a string prefix to avoid collision with numeric libraries.json IDs
+  // The _dbId holds the real Supabase id used for inventory and photo lookups
+  data.forEach((row) => {
     const lib = {
-      id: -(row.id),   // negative to avoid collision with seed data ids
+      id: `u_${row.id}`,   // prefixed string id — won't collide with numeric seed ids
       name: row.name,
       lat: row.lat,
       lng: row.lng,
       category: row.category || 'Little Free Libraries',
       photo: '',
-      _dbId: row.id,   // keep the real DB id for inventory/photo lookups
+      _dbId: row.id,        // real DB id for all Supabase queries
     };
     libraries.push(lib);
   });
