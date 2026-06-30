@@ -622,16 +622,16 @@
 // ═════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═════════════════════════════════════════════════════════════
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-const SUPABASE_ENABLED = false;
+const SUPABASE_URL = 'https://oatcxoizznsnttlerfjo.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreVJynV2be9w_sXYuw1ek';
+const SUPABASE_ENABLED = true;
 
 // AI vision extraction — set your endpoint here.
 // Expected to accept { image: base64string } and return { titles: ["Book Title", ...] }
 // See README for a sample Supabase Edge Function using the Anthropic API.
-const EXTRACTION_ENDPOINT = 'YOUR_EXTRACTION_ENDPOINT';
-const EXTRACTION_ENABLED = false;
-
+const EXTRACTION_ENDPOINT = 'https://oatcxoizznsnttlerfjo.supabase.co/functions/v1/extract-titles';
+const EXTRACTION_ENABLED = true;
+  
 let sb = null;
 if (SUPABASE_ENABLED) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
