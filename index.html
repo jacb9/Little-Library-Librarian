@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#3d5a3e">
+  <meta name="description" content="Find books in little free libraries near you, in Greater Victoria">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Little Library Librarian">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Little Library Librarian · Greater Victoria</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root {
+      --green:       #3d5a3e;
+      --green-light: #5a7d5b;
+      --green-pale:  #eef3ee;
+      --ghost:       #b8bdb4;
+      --ghost-pale:  #e4e6e1;
+      --amber:       #c47b2b;
+      --amber-light: #f0a94a;
+      --cream:       #f7f3ec;
+      --ink:         #1e2419;
+      --ink-mid:     #4a5240;
+      --ink-faint:   #8a9485;
+      --white:       #ffffff;
+      --shadow-card: 0 2px 8px rgba(30,36,25,0.13), 0 0 0 1px rgba(30,36,25,0.06);
+      --shadow-lift: 0 6px 20px rgba(30,36,25,0.18), 0 0 0 1px rgba(30,36,25,0.08);
+      --radius:      10px;
+      --font-body:   'Georgia', serif;
+      --font-ui:     system-ui, -apple-system, sans-serif;
+      --panel-h:     62vh;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; background: var(--green); }
+    button { cursor: pointer; border: none; background: none; font: inherit; }
+    img { display: block; max-width: 100%; }
+    input, select { font: inherit; }
+
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Header ────────────────────────────────────────────────── */
+    #header {
+      background: var(--green);
+      color: var(--cream);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      z-index: 1000;
+    }
+    #header h1 {
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      font-weight: normal;
+      line-height: 1.15;
+    }
+    #header h1 span {
+      display: block;
+      font-size: 0.62rem;
+      color: #c9d6c9;
+      font-family: var(--font-ui);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .icon-btn {
+      background: rgba(255,255,255,0.15);
+      color: white;
+      border-radius: 50%;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.05rem;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .icon-btn:active { background: rgba(255,255,255,0.28); }
+    .icon-btn.amber { background: var(--amber); }
+    .icon-btn.amber:active { background: var(--amber-light); }
+    #header-spacer { flex: 1; }
+
+    /* ── Search bar ───────────────────────────────────────────── */
+    #search-bar {
+      background: var(--green);
+      padding: 0 14px 10px;
+      flex-shrink: 0;
+      display: none;
+    }
+    #search-bar.open { display: block; }
+    #search-input-wrap {
+      background: white;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      box-shadow: var(--shadow-card);
+    }
+    #search-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      padding: 11px 4px;
+      font-family: var(--font-ui);
+      font-size: 0.92rem;
+      color: var(--ink);
+    }
+    #search-input::placeholder { color: var(--ink-faint); }
+    #search-clear { color: var(--ink-faint); font-size: 1.1rem; padding: 4px; display: none; }
+
+    /* ── Map ───────────────────────────────────────────────────── */
+    #map { flex: 1; z-index: 1; }
+
+    .lfl-marker {
+      width: 26px; height: 26px;
+      background: var(--ghost);
+      border: 2.5px solid white;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      cursor: pointer;
+      transition: transform 0.15s;
+      opacity: 0.75;
+    }
+    .lfl-marker.inventoried { background: var(--green); opacity: 1; }
+    .lfl-marker.active { transform: rotate(-45deg) scale(1.25); opacity: 1; }
+    .lfl-marker.active.inventoried { background: var(--amber); }
+    .lfl-marker.search-hit { background: var(--amber); opacity: 1; }
+
+    .marker-cluster-small,
+    .marker-cluster-medium,
+    .marker-cluster-large { background-color: rgba(184,189,180,0.55) !important; }
+    .marker-cluster-small div,
+    .marker-cluster-medium div,
+    .marker-cluster-large div {
+      background-color: var(--ghost) !important;
+      color: var(--ink) !important;
+      font-family: var(--font-ui);
+      font-weight: 600;
+    }
+
+    /* ── Search results overlay ──────────────────────────────── */
+    #search-results {
+      position: fixed;
+      top: 104px; left: 0; right: 0; bottom: 0;
+      background: var(--cream);
+      z-index: 600;
+      overflow-y: auto;
+      display: none;
+      padding: 4px 14px 30px;
+    }
+    #search-results.open { display: block; }
+    .search-meta {
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      color: var(--ink-faint);
+      padding: 12px 2px 8px;
+    }
+    .result-card {
+      background: white;
+      border-radius: var(--radius);
+      padding: 13px 14px;
+      margin-bottom: 8px;
+      box-shadow: var(--shadow-card);
+      cursor: pointer;
+      transition: box-shadow 0.15s;
+    }
+    .result-card:active { box-shadow: var(--shadow-lift); }
+    .result-title {
+      font-family: var(--font-body);
+      font-size: 1rem;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+    .result-match {
+      font-family: var(--font-ui);
+      font-size: 0.72rem;
+      color: var(--amber);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .result-locations {
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      color: var(--ink-mid);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .result-loc-pill {
+      background: var(--green-pale);
+      color: var(--green);
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 0.72rem;
+    }
+
+    /* ── Library Panel ────────────────────────────────────────── */
+    #panel {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: var(--panel-h);
+      background: var(--cream);
+      border-radius: var(--radius) var(--radius) 0 0;
+      box-shadow: var(--shadow-lift);
+      z-index: 500;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #panel.open { transform: translateY(0); }
+    #panel-drag { width: 36px; height: 4px; background: var(--ink-faint); border-radius: 2px; margin: 10px auto 0; flex-shrink: 0; opacity: 0.4; }
+    #panel-close { position: absolute; top: 8px; right: 12px; color: var(--ink-faint); font-size: 1.3rem; line-height: 1; padding: 4px; z-index: 10; }
+    #panel-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px 96px; }
+
+    #panel-category { font-family: var(--font-ui); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); font-weight: 600; margin-bottom: 4px; }
+    #panel-name { font-family: var(--font-body); font-size: 1.2rem; color: var(--ink); line-height: 1.25; margin-bottom: 4px; }
+    #panel-status {
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      margin-bottom: 14px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    #panel-status.empty { background: var(--ghost-pale); color: var(--ink-mid); }
+    #panel-status.has-inventory { background: var(--green-pale); color: var(--green); }
+
+    .section-label {
+      font-family: var(--font-ui);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--ink-faint);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    /* Inventory entries — photo + AI list paired */
+    .inventory-entry {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-card);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .inventory-entry-photo {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      background: var(--green-pale);
+    }
+    .inventory-entry-body { padding: 12px 14px; }
+    .inventory-entry-time {
+      font-family: var(--font-ui);
+      font-size: 0.72rem;
+      color: var(--ink-faint);
+      margin-bottom: 8px;
+    }
+    .book-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .book-chip {
+      background: var(--green-pale);
+      color: var(--ink);
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      padding: 5px 10px;
+      border-radius: 14px;
+      line-height: 1.2;
+    }
+    .book-chip.edited { background: #fdf0dc; color: #8a5a1a; }
+
+    .empty-state {
+      text-align: center;
+      padding: 28px 16px;
+      color: var(--ink-mid);
+      font-family: var(--font-ui);
+      font-size: 0.86rem;
+      line-height: 1.55;
+    }
+    .empty-state .icon { font-size: 2rem; margin-bottom: 10px; display: block; }
+    .empty-state strong { color: var(--ink); }
+
+    /* Library box photo */
+    .box-photo-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 4px; }
+    .box-photo-row img { width: 100px; height: 76px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+    .box-photo-empty {
+      width: 100%; padding: 18px;
+      background: var(--ghost-pale);
+      border-radius: 8px;
+      text-align: center;
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      color: var(--ink-faint);
+    }
+
+    #panel-actions {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: var(--cream);
+      border-top: 1px solid rgba(0,0,0,0.07);
+      padding: 10px 16px 20px;
+      display: flex;
+      gap: 8px;
+    }
+    .btn-primary {
+      flex: 1;
+      background: var(--green);
+      color: white;
+      border-radius: 8px;
+      padding: 12px 12px;
+      font-family: var(--font-ui);
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .btn-primary:active { background: var(--green-light); }
+    .btn-secondary {
+      background: var(--green-pale);
+      color: var(--green);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-family: var(--font-ui);
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1.5px solid var(--green);
+      transition: background 0.15s;
+    }
+    .btn-secondary:active { background: #dde8dd; }
+
+    /* ── Modals ───────────────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(30,36,25,0.55);
+      z-index: 900;
+      display: flex; align-items: flex-end;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-backdrop.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--cream);
+      border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%; padding: 20px 20px 36px;
+      transform: translateY(20px);
+      transition: transform 0.2s;
+      max-height: 92vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .modal-backdrop.open .modal { transform: translateY(0); }
+    .modal h2 { font-family: var(--font-body); font-size: 1.12rem; color: var(--ink); margin-bottom: 4px; }
+    .modal p.sub { font-family: var(--font-ui); font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 16px; line-height: 1.4; }
+    .modal-close { position: absolute; top: 16px; right: 16px; color: var(--ink-faint); font-size: 1.3rem; }
+
+    .confirm-card {
+      background: white; border-radius: var(--radius); padding: 13px;
+      margin-bottom: 10px; box-shadow: var(--shadow-card);
+      display: flex; align-items: center; gap: 12px;
+      cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s;
+    }
+    .confirm-card.selected { border-color: var(--green); }
+    .confirm-card-icon { width: 38px; height: 38px; background: var(--green-pale); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+    .confirm-card-text { flex: 1; }
+    .confirm-card-name { font-family: var(--font-body); font-size: 0.92rem; color: var(--ink); }
+    .confirm-card-dist { font-family: var(--font-ui); font-size: 0.7rem; color: var(--ink-faint); }
+
+    .upload-zone {
+      border: 2px dashed var(--green-light);
+      border-radius: var(--radius);
+      padding: 26px 16px;
+      text-align: center;
+      background: var(--green-pale);
+      margin: 10px 0;
+      cursor: pointer;
+      position: relative;
+    }
+    .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-zone .upload-icon { font-size: 1.9rem; margin-bottom: 6px; }
+    .upload-zone p { font-family: var(--font-ui); font-size: 0.8rem; color: var(--ink-mid); line-height: 1.4; }
+    .upload-zone .upload-preview { width: 100%; max-height: 200px; object-fit: cover; border-radius: 6px; margin-top: 8px; }
+
+    .form-label { font-family: var(--font-ui); font-size: 0.73rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-mid); margin-bottom: 6px; display: block; }
+    .form-input { width: 100%; border: 1.5px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; color: var(--ink); background: white; margin-bottom: 14px; outline: none; }
+    .form-input:focus { border-color: var(--green); }
+
+    /* AI extraction review step */
+    #extract-loading {
+      text-align: center;
+      padding: 30px 16px;
+      display: none;
+    }
+    #extract-loading.show { display: block; }
+    #extract-loading .spin {
+      font-size: 1.8rem;
+      animation: spin 1.4s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    #extract-loading p { font-family: var(--font-ui); font-size: 0.85rem; color: var(--ink-mid); margin-top: 10px; }
+
+    #extract-review { display: none; }
+    #extract-review.show { display: block; }
+    #extract-review .hint {
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      color: var(--ink-faint);
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+    .edit-chip-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+    .edit-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: white; border: 1.5px solid rgba(0,0,0,0.12);
+      border-radius: 14px; padding: 6px 6px 6px 12px;
+      font-family: var(--font-ui); font-size: 0.82rem; color: var(--ink);
+    }
+    .edit-chip input {
+      border: none; outline: none; font: inherit; color: var(--ink);
+      width: auto; min-width: 40px; max-width: 160px;
+      background: transparent;
+    }
+    .edit-chip .remove-chip {
+      color: var(--ink-faint); font-size: 0.95rem; padding: 2px 4px;
+      border-radius: 50%; flex-shrink: 0;
+    }
+    .edit-chip .remove-chip:active { background: rgba(0,0,0,0.08); color: #b03a3a; }
+    #add-title-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    #add-title-input { flex: 1; border: 1.5px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 9px 11px; font-size: 0.85rem; outline: none; }
+    #add-title-input:focus { border-color: var(--green); }
+    #add-title-btn { background: var(--green-pale); color: var(--green); border-radius: 8px; padding: 9px 14px; font-size: 0.85rem; font-weight: 600; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 30px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--ink); color: white;
+      font-family: var(--font-ui); font-size: 0.84rem;
+      padding: 10px 18px; border-radius: 20px;
+      z-index: 2000; opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      max-width: 86%; text-align: center;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    #loading {
+      position: fixed; inset: 0; background: var(--green);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 9999; gap: 14px; transition: opacity 0.4s;
+    }
+    #loading.done { opacity: 0; pointer-events: none; }
+    #loading .book { font-size: 2.6rem; animation: bounce 1s ease-in-out infinite alternate; }
+    #loading p { font-family: var(--font-body); color: var(--cream); font-size: 0.95rem; opacity: 0.85; }
+    @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="book">📚</div>
+  <p>Opening the stacks…</p>
+</div>
+
+<div id="app">
+  <div id="header">
+    <div>
+      <h1><span>Greater Victoria</span>Little Library Librarian</h1>
+    </div>
+    <div id="header-spacer"></div>
+    <button class="icon-btn" id="search-toggle" title="Search books">🔍</button>
+    <button class="icon-btn" id="locate-btn" title="Find libraries near me">📍</button>
+    <button class="icon-btn amber" id="add-btn" title="Add a library">＋</button>
+  </div>
+
+  <div id="search-bar">
+    <div id="search-input-wrap">
+      <span style="margin-right:6px">🔍</span>
+      <input id="search-input" type="text" placeholder="Search by book title or author…">
+      <button id="search-clear">✕</button>
+    </div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<div id="search-results">
+  <div class="search-meta" id="search-meta"></div>
+  <div id="search-results-list"></div>
+</div>
+
+<!-- Library detail panel -->
+<div id="panel">
+  <div id="panel-drag"></div>
+  <button id="panel-close">✕</button>
+  <div id="panel-scroll">
+    <div id="panel-category"></div>
+    <div id="panel-name"></div>
+    <div><span id="panel-status"></span></div>
+
+    <div class="section-label" style="margin-top:6px">The Library Box</div>
+    <div class="box-photo-row" id="box-photo-row"></div>
+
+    <div class="section-label" style="margin-top:18px">Inventory</div>
+    <div id="inventory-list"></div>
+  </div>
+  <div id="panel-actions">
+    <button class="btn-primary" id="btn-scan-shelf">📷 Scan the shelf</button>
+    <button class="btn-secondary" id="btn-add-box-photo">🏡</button>
+    <button class="btn-secondary" id="btn-flag">🚩</button>
+  </div>
+</div>
+
+<!-- Scan shelf modal -->
+<div class="modal-backdrop" id="scan-modal">
+  <div class="modal">
+    <button class="modal-close" id="scan-close">✕</button>
+    <h2>Scan the shelf</h2>
+    <p class="sub">Take a photo of the shelf. We'll read the spines and you can fix anything we get wrong.</p>
+
+    <div id="location-confirm" style="margin-bottom:10px; display:none">
+      <p class="form-label" style="margin-bottom:8px">Confirming library</p>
+      <div id="confirm-cards"></div>
+    </div>
+
+    <div class="upload-zone" id="scan-upload-zone">
+      <input type="file" id="scan-photo-input" accept="image/*" capture="environment">
+      <div class="upload-icon">📷</div>
+      <p>Tap to take a photo of the shelf</p>
+    </div>
+
+    <div id="extract-loading">
+      <div class="spin">⟳</div>
+      <p>Reading the spines…</p>
+    </div>
+
+    <div id="extract-review">
+      <p class="hint">Here's what we found. Tap ✕ to remove a title, edit any text that's wrong, or add a title we missed below.</p>
+      <div class="edit-chip-list" id="edit-chip-list"></div>
+      <div id="add-title-row">
+        <input id="add-title-input" type="text" placeholder="Add a title we missed…">
+        <button id="add-title-btn">Add</button>
+      </div>
+      <button class="btn-primary" id="btn-save-inventory" style="width:100%">Save this inventory</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add box photo modal -->
+<div class="modal-backdrop" id="box-photo-modal">
+  <div class="modal">
+    <button class="modal-close" id="box-photo-close">✕</button>
+    <h2>Add a photo of the box</h2>
+    <p class="sub">Help others spot it on the street.</p>
+    <div id="box-location-confirm" style="margin-bottom:10px; display:none">
+      <div id="box-confirm-cards"></div>
+    </div>
+    <div class="upload-zone" id="box-upload-zone">
+      <input type="file" id="box-photo-input" accept="image/*" capture="environment">
+      <div class="upload-icon">📷</div>
+      <p>Tap to photograph the box</p>
+    </div>
+    <button class="btn-primary" id="btn-save-box-photo" style="width:100%; margin-top:8px">Save photo</button>
+  </div>
+</div>
+
+<!-- Add library modal -->
+<div class="modal-backdrop" id="add-modal">
+  <div class="modal">
+    <button class="modal-close" id="add-close">✕</button>
+    <h2>Add a library</h2>
+    <p class="sub">Help grow the map by adding a library you know about.</p>
+
+    <label class="form-label">Library name (optional)</label>
+    <input class="form-input" type="text" id="new-name" placeholder="e.g. The Oak Street Box">
+
+    <label class="form-label">Category</label>
+    <select class="form-input" id="new-category">
+      <option value="Little Free Libraries">📚 Book library</option>
+      <option value="Seed Libraries">🌱 Seed / plant library</option>
+      <option value="Puzzle and Game Libraries">🎲 Puzzle / game library</option>
+      <option value="Little Art Galleries and Art Supplies">🎨 Art gallery / supplies</option>
+    </select>
+
+    <label class="form-label">Photo of the box (optional)</label>
+    <div class="upload-zone" id="add-photo-zone" style="margin-bottom:14px">
+      <input type="file" id="add-photo-input" accept="image/*" capture="environment">
+      <div class="upload-icon">📷</div>
+      <p>Tap to photograph the box</p>
+    </div>
+
+    <p class="form-label" style="margin-bottom:8px">Location</p>
+    <p style="font-family:var(--font-ui);font-size:0.8rem;color:var(--ink-faint);margin-bottom:10px" id="new-location-status">
+      Tap below to use your current location.
+    </p>
+    <button class="btn-secondary" style="width:100%;margin-bottom:16px" id="btn-get-location">
+      📍 Use my current location
+    </button>
+
+    <button class="btn-primary" style="width:100%" id="btn-submit-new">Add to map</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═════════════════════════════════════════════════════════════
+// CONFIGURATION
+// ═════════════════════════════════════════════════════════════
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_ENABLED = false;
+
+// AI vision extraction — set your endpoint here.
+// Expected to accept { image: base64string } and return { titles: ["Book Title", ...] }
+// See README for a sample Supabase Edge Function using the Anthropic API.
+const EXTRACTION_ENDPOINT = 'YOUR_EXTRACTION_ENDPOINT';
+const EXTRACTION_ENABLED = false;
+
+let sb = null;
+if (SUPABASE_ENABLED) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ═════════════════════════════════════════════════════════════
+// State
+// ═════════════════════════════════════════════════════════════
+let map, clusterGroup;
+let libraries = [];
+let inventoriedIds = new Set();   // library ids with at least one inventory
+let activeLibrary = null;
+let activeMarker = null;
+let userLocation = null;
+let pendingScanPhoto = null;
+let pendingBoxPhoto = null;
+let extractedTitles = [];          // current editable list in scan modal
+let newLibraryLatLng = null;
+
+const CATEGORY_EMOJI = {
+  'Little Free Libraries': '📚',
+  'Seed Libraries': '🌱',
+  'Puzzle and Game Libraries': '🎲',
+  'Little Art Galleries and Art Supplies': '🎨',
+  'Something Special': '⭐',
+};
+const CATEGORY_LABEL = {
+  'Little Free Libraries': 'Book Library',
+  'Seed Libraries': 'Seed / Plant Library',
+  'Puzzle and Game Libraries': 'Puzzle / Game Library',
+  'Little Art Galleries and Art Supplies': 'Art Gallery',
+  'Something Special': 'Something Special',
+};
+
+// ═════════════════════════════════════════════════════════════
+// Map
+// ═════════════════════════════════════════════════════════════
+function initMap() {
+  map = L.map('map', { center: [48.4284, -123.3656], zoom: 13, zoomControl: false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  clusterGroup = L.markerClusterGroup({ maxClusterRadius: 40, spiderfyOnMaxZoom: true, showCoverageOnHover: false });
+  map.addLayer(clusterGroup);
+  map.on('click', () => { if (activeLibrary) closePanel(); });
+}
+
+function makeMarkerIcon(libId, active = false, searchHit = false) {
+  const classes = ['lfl-marker'];
+  if (inventoriedIds.has(libId)) classes.push('inventoried');
+  if (active) classes.push('active');
+  if (searchHit) classes.push('search-hit');
+  return L.divIcon({
+    className: '',
+    html: `<div class="${classes.join(' ')}"></div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 26],
+  });
+}
+
+function loadMarkers() {
+  clusterGroup.clearLayers();
+  libraries.forEach(lib => {
+    const marker = L.marker([lib.lat, lib.lng], { icon: makeMarkerIcon(lib.id) });
+    marker.on('click', () => openPanel(lib, marker));
+    lib._marker = marker;
+    clusterGroup.addLayer(marker);
+  });
+}
+
+function refreshMarkerStyle(lib) {
+  if (!lib._marker) return;
+  const isActive = activeMarker === lib._marker;
+  lib._marker.setIcon(makeMarkerIcon(lib.id, isActive));
+}
+
+// ═════════════════════════════════════════════════════════════
+// Panel
+// ═════════════════════════════════════════════════════════════
+function openPanel(lib, marker) {
+  if (activeLibrary) refreshMarkerStyle(activeLibrary);
+  activeLibrary = lib;
+  activeMarker = marker;
+  marker.setIcon(makeMarkerIcon(lib.id, true));
+
+  document.getElementById('panel-category').textContent =
+    (CATEGORY_EMOJI[lib.category] || '📚') + '  ' + (CATEGORY_LABEL[lib.category] || lib.category);
+  document.getElementById('panel-name').textContent = lib.name;
+
+  const statusEl = document.getElementById('panel-status');
+  const hasInv = inventoriedIds.has(lib.id);
+  statusEl.textContent = hasInv ? '✓ Inventoried' : '○ Not yet inventoried — be the first to scan it';
+  statusEl.className = hasInv ? 'has-inventory' : 'empty';
+
+  // Box photo row — seed photo from CSV if present
+  const boxRow = document.getElementById('box-photo-row');
+  boxRow.innerHTML = lib.photo
+    ? `<img src="${lib.photo}" alt="${lib.name}" loading="lazy">`
+    : `<div class="box-photo-empty">No photo of the box yet</div>`;
+
+  // Inventory list
+  const invList = document.getElementById('inventory-list');
+  if (SUPABASE_ENABLED) {
+    loadInventoryEntries(lib.id, invList);
+    loadBoxPhotos(lib.id, boxRow);
+  } else {
+    invList.innerHTML = `
+      <div class="empty-state">
+        <span class="icon">📷</span>
+        <strong>No inventory yet.</strong><br>
+        Tap "Scan the shelf" below to be the first.
+      </div>`;
+  }
+
+  document.getElementById('panel').classList.add('open');
+
+  const panelH = window.innerHeight * 0.62;
+  const point = map.latLngToContainerPoint([lib.lat, lib.lng]);
+  const newPoint = L.point(point.x, point.y + panelH / 2 - 50);
+  map.panTo(map.containerPointToLatLng(newPoint), { animate: true, duration: 0.3 });
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  if (activeLibrary) refreshMarkerStyle(activeLibrary);
+  activeMarker = null;
+  activeLibrary = null;
+}
+
+async function loadInventoryEntries(libraryId, container) {
+  container.innerHTML = `<div class="empty-state"><span class="icon">⏳</span></div>`;
+  const { data, error } = await sb
+    .from('inventories')
+    .select('*')
+    .eq('library_id', libraryId)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (error || !data || data.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <span class="icon">📷</span>
+        <strong>No inventory yet.</strong><br>
+        Tap "Scan the shelf" below to be the first.
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = data.map(entry => {
+    const d = new Date(entry.created_at);
+    const timeStr = `${d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })} at ${d.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })}`;
+    const titles = entry.titles || [];
+    const chips = titles.map(t => `<span class="book-chip">${escapeHtml(t)}</span>`).join('');
+    return `
+      <div class="inventory-entry">
+        <img class="inventory-entry-photo" src="${entry.photo_url}" alt="Shelf photo" loading="lazy">
+        <div class="inventory-entry-body">
+          <div class="inventory-entry-time">📅 ${timeStr}</div>
+          <div class="book-chip-list">${chips || '<span class="book-chip">No titles recorded</span>'}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function loadBoxPhotos(libraryId, container) {
+  const { data } = await sb
+    .from('box_photos')
+    .select('*')
+    .eq('library_id', libraryId)
+    .order('created_at', { ascending: false })
+    .limit(4);
+  if (!data || data.length === 0) return;
+  const imgs = data.map(p => `<img src="${p.photo_url}" alt="Library box" loading="lazy">`).join('');
+  container.innerHTML = imgs + container.innerHTML;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ═════════════════════════════════════════════════════════════
+// Global search across all inventories
+// ═════════════════════════════════════════════════════════════
+let searchTimer;
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  document.getElementById('search-clear').style.display = q ? 'block' : 'none';
+  if (!q) { closeSearchResults(); return; }
+  searchTimer = setTimeout(() => runSearch(q), 300);
+});
+
+document.getElementById('search-clear').addEventListener('click', () => {
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-clear').style.display = 'none';
+  closeSearchResults();
+});
+
+document.getElementById('search-toggle').addEventListener('click', () => {
+  const bar = document.getElementById('search-bar');
+  bar.classList.toggle('open');
+  if (bar.classList.contains('open')) document.getElementById('search-input').focus();
+  else closeSearchResults();
+});
+
+function closeSearchResults() {
+  document.getElementById('search-results').classList.remove('open');
+  clearSearchHighlights();
+}
+
+function clearSearchHighlights() {
+  libraries.forEach(lib => { if (lib._marker) refreshMarkerStyle(lib); });
+}
+
+async function runSearch(query) {
+  const resultsDiv = document.getElementById('search-results');
+  const listDiv = document.getElementById('search-results-list');
+  const metaDiv = document.getElementById('search-meta');
+  resultsDiv.classList.add('open');
+
+  if (!SUPABASE_ENABLED) {
+    metaDiv.textContent = '';
+    listDiv.innerHTML = `
+      <div class="empty-state">
+        <span class="icon">🔍</span>
+        Search will work once libraries have been scanned and Supabase is connected.
+      </div>`;
+    return;
+  }
+
+  metaDiv.textContent = 'Searching…';
+  listDiv.innerHTML = '';
+
+  // Fuzzy search via Postgres trigram/ilike — fetch all inventories and match client-side
+  // for simplicity at this scale; move to a Postgres function (pg_trgm) as data grows.
+  const { data, error } = await sb.from('inventories').select('library_id, titles, created_at');
+  if (error || !data) {
+    metaDiv.textContent = 'Search failed — please try again.';
+    return;
+  }
+
+  const matches = fuzzyMatchTitles(query, data);
+
+  if (matches.length === 0) {
+    metaDiv.textContent = `No matches for "${query}"`;
+    listDiv.innerHTML = `
+      <div class="empty-state">
+        <span class="icon">📭</span>
+        No libraries currently show this title.<br>Try a shorter search, or check back as more shelves get scanned.
+      </div>`;
+    return;
+  }
+
+  metaDiv.textContent = `${matches.length} possible match${matches.length > 1 ? 'es' : ''} for "${query}"`;
+  listDiv.innerHTML = matches.map(m => {
+    const libs = m.libraryIds.map(id => {
+      const lib = libraries.find(l => l.id === id);
+      return lib ? `<span class="result-loc-pill">${lib.name}</span>` : '';
+    }).join('');
+    return `
+      <div class="result-card" data-title="${escapeHtml(m.title)}">
+        <div class="result-title">${escapeHtml(m.title)}</div>
+        <div class="result-match">${m.matchQuality}</div>
+        <div class="result-locations">${libs}</div>
+      </div>`;
+  }).join('');
+
+  // Highlight matched libraries on map
+  const hitIds = new Set(matches.flatMap(m => m.libraryIds));
+  libraries.forEach(lib => {
+    if (lib._marker) lib._marker.setIcon(makeMarkerIcon(lib.id, false, hitIds.has(lib.id)));
+  });
+
+  // Tap a result to jump to map + open nearest matching library
+  listDiv.querySelectorAll('.result-card').forEach((card, i) => {
+    card.addEventListener('click', () => {
+      const match = matches[i];
+      const lib = libraries.find(l => l.id === match.libraryIds[0]);
+      if (lib) {
+        document.getElementById('search-bar').classList.remove('open');
+        closeSearchResults();
+        map.flyTo([lib.lat, lib.lng], 16, { duration: 0.8 });
+        setTimeout(() => openPanel(lib, lib._marker), 500);
+      }
+    });
+  });
+}
+
+// Simple fuzzy matching: normalised substring + Levenshtein-ish tolerance
+function fuzzyMatchTitles(query, inventoryRows) {
+  const q = normalize(query);
+  const titleMap = new Map(); // normalized title -> { title, libraryIds:Set, quality }
+
+  inventoryRows.forEach(row => {
+    (row.titles || []).forEach(title => {
+      const nt = normalize(title);
+      let quality = null;
+      if (nt === q) quality = 'Exact match';
+      else if (nt.includes(q) || q.includes(nt)) quality = 'Close match';
+      else if (levenshteinClose(nt, q)) quality = 'Possible match';
+
+      if (quality) {
+        const key = nt;
+        if (!titleMap.has(key)) {
+          titleMap.set(key, { title, libraryIds: new Set(), quality });
+        }
+        titleMap.get(key).libraryIds.add(row.library_id);
+        // Prefer better quality label if found again
+        const order = { 'Exact match': 0, 'Close match': 1, 'Possible match': 2 };
+        if (order[quality] < order[titleMap.get(key).quality]) {
+          titleMap.get(key).quality = quality;
+        }
+      }
+    });
+  });
+
+  return Array.from(titleMap.values())
+    .map(v => ({ title: v.title, libraryIds: Array.from(v.libraryIds), matchQuality: v.quality }))
+    .sort((a, b) => {
+      const order = { 'Exact match': 0, 'Close match': 1, 'Possible match': 2 };
+      return order[a.matchQuality] - order[b.matchQuality];
+    });
+}
+
+function normalize(s) {
+  return s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function levenshteinClose(a, b, maxDist = 2) {
+  if (Math.abs(a.length - b.length) > maxDist + 2) return false;
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    }
+  }
+  return dp[m][n] <= maxDist;
+}
+
+// ═════════════════════════════════════════════════════════════
+// Location helpers
+// ═════════════════════════════════════════════════════════════
+function getDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function getNearby(lat, lng, n = 5) {
+  return libraries
+    .map(lib => ({ ...lib, _dist: getDistance(lat, lng, lib.lat, lib.lng) }))
+    .filter(l => l._dist < 200)
+    .sort((a, b) => a._dist - b._dist)
+    .slice(0, n);
+}
+
+document.getElementById('locate-btn').addEventListener('click', () => {
+  if (!navigator.geolocation) { showToast('Location not supported'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    map.flyTo([userLocation.lat, userLocation.lng], 16, { duration: 1 });
+    if (window._userDot) map.removeLayer(window._userDot);
+    window._userDot = L.circleMarker([userLocation.lat, userLocation.lng], {
+      radius: 8, fillColor: '#4285f4', fillOpacity: 1, color: 'white', weight: 2.5,
+    }).addTo(map);
+    const nearby = getNearby(userLocation.lat, userLocation.lng, 1);
+    if (nearby.length > 0) showToast(`Nearest: ${nearby[0].name} (${Math.round(nearby[0]._dist)}m)`);
+  }, () => showToast('Could not get your location'));
+});
+
+// ═════════════════════════════════════════════════════════════
+// Scan shelf flow
+// ═════════════════════════════════════════════════════════════
+document.getElementById('btn-scan-shelf').addEventListener('click', () => {
+  pendingScanPhoto = null;
+  extractedTitles = [];
+  document.getElementById('scan-photo-input').value = '';
+  resetUploadZoneVisual('scan-upload-zone');
+  document.getElementById('extract-loading').classList.remove('show');
+  document.getElementById('extract-review').classList.remove('show');
+  buildLocationConfirm('confirm-cards');
+  document.getElementById('scan-modal').classList.add('open');
+});
+document.getElementById('scan-close').addEventListener('click', () => {
+  document.getElementById('scan-modal').classList.remove('open');
+});
+
+function buildLocationConfirm(containerId) {
+  const wrap = document.getElementById('location-confirm') || document.getElementById('box-location-confirm');
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const parentWrap = container.parentElement;
+  parentWrap.style.display = 'block';
+
+  if (activeLibrary) {
+    const card = makeConfirmCard(activeLibrary, null);
+    card.classList.add('selected');
+    container.appendChild(card);
+    return;
+  }
+  if (userLocation) {
+    const nearby = getNearby(userLocation.lat, userLocation.lng, 5);
+    if (nearby.length > 0) {
+      nearby.forEach((lib, i) => {
+        const card = makeConfirmCard(lib, lib._dist);
+        if (i === 0) { card.classList.add('selected'); activeLibrary = lib; }
+        container.appendChild(card);
+      });
+      return;
+    }
+  }
+  container.innerHTML = `<div class="empty-state"><span class="icon">🗺</span>Select a library on the map first, then tap Scan or Add Photo.</div>`;
+}
+
+function makeConfirmCard(lib, dist) {
+  const card = document.createElement('div');
+  card.className = 'confirm-card';
+  const distText = dist != null ? `${Math.round(dist)}m away` : 'Selected from map';
+  card.innerHTML = `
+    <div class="confirm-card-icon">${CATEGORY_EMOJI[lib.category] || '📚'}</div>
+    <div class="confirm-card-text">
+      <div class="confirm-card-name">${lib.name}</div>
+      <div class="confirm-card-dist">${distText}</div>
+    </div><div>✓</div>`;
+  card.addEventListener('click', () => {
+    card.parentElement.querySelectorAll('.confirm-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    activeLibrary = lib;
+  });
+  return card;
+}
+
+function resetUploadZoneVisual(zoneId) {
+  const zone = document.getElementById(zoneId);
+  zone.querySelector('.upload-icon').style.display = '';
+  zone.querySelector('p').style.display = '';
+  const prev = zone.querySelector('.upload-preview');
+  if (prev) prev.remove();
+}
+
+document.getElementById('scan-photo-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  pendingScanPhoto = file;
+
+  const zone = document.getElementById('scan-upload-zone');
+  zone.querySelector('.upload-icon').style.display = 'none';
+  zone.querySelector('p').style.display = 'none';
+  const prev = zone.querySelector('.upload-preview');
+  if (prev) prev.remove();
+  const img = document.createElement('img');
+  img.className = 'upload-preview';
+  img.src = URL.createObjectURL(file);
+  zone.appendChild(img);
+
+  await runExtraction(file);
+});
+
+async function runExtraction(file) {
+  document.getElementById('extract-loading').classList.add('show');
+  document.getElementById('extract-review').classList.remove('show');
+
+  if (!EXTRACTION_ENABLED) {
+    // Demo fallback so the review UI can be tested without a live endpoint
+    await new Promise(r => setTimeout(r, 900));
+    extractedTitles = [];
+    renderEditChips();
+    document.getElementById('extract-loading').classList.remove('show');
+    document.getElementById('extract-review').classList.add('show');
+    showToast('AI reading not connected yet — add titles manually below');
+    return;
+  }
+
+  try {
+    const base64 = await fileToBase64(file);
+    const res = await fetch(EXTRACTION_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64 }),
+    });
+    const data = await res.json();
+    extractedTitles = (data.titles || []).map(t => ({ text: t, edited: false }));
+  } catch (err) {
+    console.error(err);
+    showToast('Could not read the photo — add titles manually');
+    extractedTitles = [];
+  }
+
+  document.getElementById('extract-loading').classList.remove('show');
+  document.getElementById('extract-review').classList.add('show');
+  renderEditChips();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderEditChips() {
+  const list = document.getElementById('edit-chip-list');
+  list.innerHTML = '';
+  extractedTitles.forEach((item, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'edit-chip' + (item.edited ? ' edited' : '');
+    chip.innerHTML = `
+      <input type="text" value="${escapeHtml(item.text)}" data-idx="${idx}">
+      <span class="remove-chip" data-idx="${idx}">✕</span>`;
+    list.appendChild(chip);
+  });
+
+  list.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', e => {
+      const idx = +e.target.dataset.idx;
+      extractedTitles[idx].text = e.target.value;
+      extractedTitles[idx].edited = true;
+      e.target.closest('.edit-chip').classList.add('edited');
+    });
+  });
+  list.querySelectorAll('.remove-chip').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = +e.target.dataset.idx;
+      extractedTitles.splice(idx, 1);
+      renderEditChips();
+    });
+  });
+}
+
+document.getElementById('add-title-btn').addEventListener('click', () => {
+  const input = document.getElementById('add-title-input');
+  const val = input.value.trim();
+  if (!val) return;
+  extractedTitles.push({ text: val, edited: true, addedByUser: true });
+  input.value = '';
+  renderEditChips();
+});
+document.getElementById('add-title-input').addEventListener('keypress', e => {
+  if (e.key === 'Enter') document.getElementById('add-title-btn').click();
+});
+
+document.getElementById('btn-save-inventory').addEventListener('click', async () => {
+  if (!activeLibrary) { showToast('Please confirm which library this is'); return; }
+  if (!pendingScanPhoto) { showToast('Please take a photo first'); return; }
+
+  if (!SUPABASE_ENABLED) {
+    showToast('Connect Supabase to save inventories — see README');
+    document.getElementById('scan-modal').classList.remove('open');
+    return;
+  }
+
+  const btn = document.getElementById('btn-save-inventory');
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+
+  try {
+    const ext = pendingScanPhoto.name.split('.').pop() || 'jpg';
+    const path = `inventory/${activeLibrary.id}/${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('lll-photos').upload(path, pendingScanPhoto);
+    if (upErr) throw upErr;
+    const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
+
+    const titles = extractedTitles.map(t => t.text).filter(Boolean);
+    const editedCount = extractedTitles.filter(t => t.edited).length;
+
+    const { error: dbErr } = await sb.from('inventories').insert({
+      library_id: activeLibrary.id,
+      photo_url: urlData.publicUrl,
+      titles,
+      ai_edited_count: editedCount,
+      ai_total_count: extractedTitles.length,
+    });
+    if (dbErr) throw dbErr;
+
+    inventoriedIds.add(activeLibrary.id);
+    refreshMarkerStyle(activeLibrary);
+
+    showToast('Inventory saved — thank you!');
+    document.getElementById('scan-modal').classList.remove('open');
+
+    const invList = document.getElementById('inventory-list');
+    loadInventoryEntries(activeLibrary.id, invList);
+    document.getElementById('panel-status').textContent = '✓ Inventoried';
+    document.getElementById('panel-status').className = 'has-inventory';
+
+  } catch (err) {
+    console.error(err);
+    showToast('Could not save — please try again');
+  } finally {
+    btn.textContent = 'Save this inventory';
+    btn.disabled = false;
+  }
+});
+
+// ═════════════════════════════════════════════════════════════
+// Box photo flow
+// ═════════════════════════════════════════════════════════════
+document.getElementById('btn-add-box-photo').addEventListener('click', () => {
+  pendingBoxPhoto = null;
+  document.getElementById('box-photo-input').value = '';
+  resetUploadZoneVisual('box-upload-zone');
+  buildLocationConfirm('box-confirm-cards');
+  document.getElementById('box-photo-modal').classList.add('open');
+});
+document.getElementById('box-photo-close').addEventListener('click', () => {
+  document.getElementById('box-photo-modal').classList.remove('open');
+});
+document.getElementById('box-photo-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  pendingBoxPhoto = file;
+  const zone = document.getElementById('box-upload-zone');
+  zone.querySelector('.upload-icon').style.display = 'none';
+  zone.querySelector('p').style.display = 'none';
+  const prev = zone.querySelector('.upload-preview');
+  if (prev) prev.remove();
+  const img = document.createElement('img');
+  img.className = 'upload-preview';
+  img.src = URL.createObjectURL(file);
+  zone.appendChild(img);
+});
+document.getElementById('btn-save-box-photo').addEventListener('click', async () => {
+  if (!activeLibrary) { showToast('Please confirm which library this is'); return; }
+  if (!pendingBoxPhoto) { showToast('Please take a photo first'); return; }
+  if (!SUPABASE_ENABLED) {
+    showToast('Connect Supabase to save photos — see README');
+    document.getElementById('box-photo-modal').classList.remove('open');
+    return;
+  }
+  const btn = document.getElementById('btn-save-box-photo');
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+  try {
+    const ext = pendingBoxPhoto.name.split('.').pop() || 'jpg';
+    const path = `box/${activeLibrary.id}/${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('lll-photos').upload(path, pendingBoxPhoto);
+    if (upErr) throw upErr;
+    const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
+    await sb.from('box_photos').insert({ library_id: activeLibrary.id, photo_url: urlData.publicUrl });
+    showToast('Photo saved — thanks!');
+    document.getElementById('box-photo-modal').classList.remove('open');
+    loadBoxPhotos(activeLibrary.id, document.getElementById('box-photo-row'));
+  } catch (err) {
+    console.error(err);
+    showToast('Could not save — please try again');
+  } finally {
+    btn.textContent = 'Save photo';
+    btn.disabled = false;
+  }
+});
+
+// ═════════════════════════════════════════════════════════════
+// Add library
+// ═════════════════════════════════════════════════════════════
+document.getElementById('add-btn').addEventListener('click', () => {
+  newLibraryLatLng = null;
+  document.getElementById('add-modal').classList.add('open');
+});
+document.getElementById('add-close').addEventListener('click', () => {
+  document.getElementById('add-modal').classList.remove('open');
+});
+document.getElementById('add-photo-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const zone = document.getElementById('add-photo-zone');
+  zone.querySelector('.upload-icon').style.display = 'none';
+  zone.querySelector('p').style.display = 'none';
+  const prev = zone.querySelector('.upload-preview');
+  if (prev) prev.remove();
+  const img = document.createElement('img');
+  img.className = 'upload-preview';
+  img.src = URL.createObjectURL(file);
+  zone.appendChild(img);
+});
+document.getElementById('btn-get-location').addEventListener('click', () => {
+  if (!navigator.geolocation) { showToast('Location not available'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    newLibraryLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    document.getElementById('new-location-status').textContent =
+      `✓ Got your location (${newLibraryLatLng.lat.toFixed(5)}, ${newLibraryLatLng.lng.toFixed(5)})`;
+  }, () => showToast('Could not get location'));
+});
+document.getElementById('btn-submit-new').addEventListener('click', async () => {
+  if (!newLibraryLatLng) { showToast('Please set a location first'); return; }
+  const name = document.getElementById('new-name').value.trim() || 'New Little Free Library';
+  const category = document.getElementById('new-category').value;
+  const photoFile = document.getElementById('add-photo-input').files[0];
+
+  if (!SUPABASE_ENABLED) {
+    showToast('Connect Supabase to add libraries — see README');
+    document.getElementById('add-modal').classList.remove('open');
+    return;
+  }
+
+  const btn = document.getElementById('btn-submit-new');
+  btn.textContent = 'Adding…';
+  btn.disabled = true;
+  try {
+    const { data: libData, error: libErr } = await sb.from('libraries_user_added').insert({
+      name, category, lat: newLibraryLatLng.lat, lng: newLibraryLatLng.lng,
+    }).select().single();
+    if (libErr) throw libErr;
+
+    let photoUrl = '';
+    if (photoFile) {
+      const ext = photoFile.name.split('.').pop() || 'jpg';
+      const path = `box/${libData.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('lll-photos').upload(path, photoFile);
+      if (!upErr) {
+        const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
+        photoUrl = urlData.publicUrl;
+        await sb.from('box_photos').insert({ library_id: libData.id, photo_url: photoUrl });
+      }
+    }
+
+    const newLib = { id: libData.id, name, category, lat: newLibraryLatLng.lat, lng: newLibraryLatLng.lng, photo: photoUrl };
+    libraries.push(newLib);
+    const marker = L.marker([newLib.lat, newLib.lng], { icon: makeMarkerIcon(newLib.id) });
+    marker.on('click', () => openPanel(newLib, marker));
+    newLib._marker = marker;
+    clusterGroup.addLayer(marker);
+
+    showToast('Library added — thank you!');
+    document.getElementById('add-modal').classList.remove('open');
+    document.getElementById('new-name').value = '';
+    openPanel(newLib, marker);
+  } catch (err) {
+    console.error(err);
+    showToast('Could not add library — please try again');
+  } finally {
+    btn.textContent = 'Add to map';
+    btn.disabled = false;
+  }
+});
+
+// ═════════════════════════════════════════════════════════════
+// Misc
+// ═════════════════════════════════════════════════════════════
+document.getElementById('panel-close').addEventListener('click', closePanel);
+document.getElementById('btn-flag').addEventListener('click', () => {
+  if (!activeLibrary) return;
+  showToast('Problem reported — thanks for flagging this');
+});
+['scan-modal', 'box-photo-modal', 'add-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => {
+    if (e.target === document.getElementById(id)) {
+      document.getElementById(id).classList.remove('open');
+    }
+  });
+});
+
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ═════════════════════════════════════════════════════════════
+// Boot
+// ═════════════════════════════════════════════════════════════
+async function loadInventoriedIds() {
+  if (!SUPABASE_ENABLED) return;
+  const { data } = await sb.from('inventories').select('library_id');
+  if (data) data.forEach(row => inventoriedIds.add(row.library_id));
+}
+
+async function boot() {
+  initMap();
+  try {
+    const res = await fetch('libraries.json');
+    libraries = await res.json();
+  } catch (e) {
+    console.error('Could not load libraries.json', e);
+    libraries = [];
+  }
+  await loadInventoriedIds();
+  loadMarkers();
+
+  document.getElementById('loading').classList.add('done');
+  setTimeout(() => document.getElementById('loading').remove(), 500);
+  showToast(`${libraries.length} libraries on the map`);
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    }, () => {});
+  }
+}
+boot();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+
+</body>
+</html>
