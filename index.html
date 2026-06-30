@@ -629,9 +629,9 @@ const SUPABASE_ENABLED = true;
 // AI vision extraction — set your endpoint here.
 // Expected to accept { image: base64string } and return { titles: ["Book Title", ...] }
 // See README for a sample Supabase Edge Function using the Anthropic API.
-const EXTRACTION_ENDPOINT = 'YOUR_EXTRACTION_ENDPOINT';
-const EXTRACTION_ENABLED = false;
-
+const EXTRACTION_ENDPOINT = 'https://oatcxoizznsnttlerfjo.supabase.co/functions/v1/extract-titles';
+const EXTRACTION_ENABLED = true;
+  
 let sb = null;
 if (SUPABASE_ENABLED) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
