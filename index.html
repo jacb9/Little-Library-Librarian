@@ -1224,14 +1224,25 @@ async function runExtraction(file) {
     const base64 = await fileToBase64(file);
     const res = await fetch(EXTRACTION_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'apiKey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
       body: JSON.stringify({ image: base64 }),
     });
-    const data = await res.json();
-    extractedTitles = (data.titles || []).map(t => ({ text: t, edited: false }));
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('Extraction endpoint error:', res.status, errText);
+      showToast(`Could not read the photo (${res.status}) — add titles manually`);
+      extractedTitles = [];
+    } else {
+      const data = await res.json();
+      extractedTitles = (data.titles || []).map(t => ({ text: t, edited: false }));
+    }
   } catch (err) {
-    console.error(err);
-    showToast('Could not read the photo — add titles manually');
+    console.error('Extraction fetch error:', err);
+    showToast('Could not reach the reading service — add titles manually');
     extractedTitles = [];
   }
 
