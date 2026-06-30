@@ -353,14 +353,19 @@
     .box-photo-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 4px; }
     .box-photo-row img { width: 100px; height: 76px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
     .box-photo-empty {
-      width: 100%; padding: 18px;
+      width: 100%; padding: 14px 18px;
       background: var(--ghost-pale);
       border-radius: 8px;
       text-align: center;
       font-family: var(--font-ui);
       font-size: 0.78rem;
       color: var(--ink-faint);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
+    .box-photo-empty .empty-icon { font-size: 1.1rem; }
 
     #panel-actions {
       position: absolute;
@@ -707,6 +712,11 @@
     </div>
 
     <div class="faq-item">
+      <div class="faq-item-label">To add a photo of the library box</div>
+      <div class="faq-item-body">Open a library, then tap <span class="faq-icon-inline">🏡</span> at the bottom of the screen.</div>
+    </div>
+
+    <div class="faq-item">
       <div class="faq-item-label">Spotted something wrong with a library?</div>
       <div class="faq-item-body">Use <span class="faq-icon-inline">🚩</span> on its page.</div>
     </div>
@@ -827,9 +837,9 @@ function openPanel(lib, marker) {
 
   // Box photo row — seed photo from CSV if present
   const boxRow = document.getElementById('box-photo-row');
-  boxRow.innerHTML = lib.photo
-    ? `<img src="${lib.photo}" alt="${lib.name}" loading="lazy">`
-    : `<div class="box-photo-empty">No photo of the box yet</div>`;
+  // Always start with the empty state — Supabase box photos load via loadBoxPhotos below.
+  // We deliberately ignore seed Google URLs since they expire and aren't owned by us.
+  boxRow.innerHTML = `<div class="box-photo-empty"><span class="empty-icon">🏡</span>No photo yet — be the first to add one</div>`;
 
   // Inventory list
   const invList = document.getElementById('inventory-list');
