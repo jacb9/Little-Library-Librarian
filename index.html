@@ -47,7 +47,12 @@
     img { display: block; max-width: 100%; }
     input, select { font: inherit; }
 
-    #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;      /* fallback for browsers without dvh support */
+      height: 100dvh;     /* tracks the real visible viewport on mobile as browser chrome hides/shows */
+    }
 
     /* ── Header ────────────────────────────────────────────────── */
     #header {
@@ -715,7 +720,7 @@
 // CONFIGURATION
 // ═════════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://oatcxoizznsnttlerfjo.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreVJynV2be9w_sXYuw1ek';
+const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreV';
 const SUPABASE_ENABLED = true;
 
 // AI vision extraction — set your endpoint here.
@@ -1535,6 +1540,29 @@ async function loadInventoriedIds() {
   if (data) data.forEach(row => inventoriedIds.add(row.library_id));
 }
 
+async function loadUserAddedLibraries() {
+  if (!SUPABASE_ENABLED) return;
+  const { data, error } = await sb
+    .from('libraries_user_added')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error || !data) return;
+
+  // Assign negative IDs so they don't collide with libraries.json IDs
+  data.forEach((row, i) => {
+    const lib = {
+      id: -(row.id),   // negative to avoid collision with seed data ids
+      name: row.name,
+      lat: row.lat,
+      lng: row.lng,
+      category: row.category || 'Little Free Libraries',
+      photo: '',
+      _dbId: row.id,   // keep the real DB id for inventory/photo lookups
+    };
+    libraries.push(lib);
+  });
+}
+
 async function boot() {
   initMap();
   try {
@@ -1544,6 +1572,7 @@ async function boot() {
     console.error('Could not load libraries.json', e);
     libraries = [];
   }
+  await loadUserAddedLibraries();
   await loadInventoriedIds();
   loadMarkers();
 
