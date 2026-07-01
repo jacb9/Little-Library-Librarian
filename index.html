@@ -614,7 +614,7 @@
 
     <div id="extract-loading">
       <div class="spin">⟳</div>
-      <p>Reading the spines…</p>
+      <p id="extract-loading-msg">Sending photo…</p>
     </div>
 
     <div id="extract-review">
@@ -1286,6 +1286,21 @@ async function runExtraction(file) {
   document.getElementById('extract-loading').classList.add('show');
   document.getElementById('extract-review').classList.remove('show');
 
+  // Cycle through messages so slow connections don't feel broken
+  const loadingMessages = [
+    'Sending photo…',
+    'Reading the spines…',
+    'Still working — slow connection?',
+    'Almost there…',
+  ];
+  let msgIdx = 0;
+  const msgEl = document.getElementById('extract-loading-msg');
+  if (msgEl) msgEl.textContent = loadingMessages[0];
+  const msgInterval = setInterval(() => {
+    msgIdx = Math.min(msgIdx + 1, loadingMessages.length - 1);
+    if (msgEl) msgEl.textContent = loadingMessages[msgIdx];
+  }, 4000);
+
   if (!EXTRACTION_ENABLED) {
     // Demo fallback so the review UI can be tested without a live endpoint
     await new Promise(r => setTimeout(r, 900));
@@ -1323,6 +1338,7 @@ async function runExtraction(file) {
     extractedTitles = [];
   }
 
+  clearInterval(msgInterval);
   document.getElementById('extract-loading').classList.remove('show');
   document.getElementById('extract-review').classList.add('show');
   renderEditChips();
@@ -1415,7 +1431,8 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     refreshMarkerStyle(activeLibrary);
 
     showToast('Inventory saved — thank you!');
-    document.getElementById('scan-modal').classList.remove('open');
+    // Small delay before closing so touch events don't bleed to the map
+    setTimeout(() => document.getElementById('scan-modal').classList.remove('open'), 100);
 
     const invList = document.getElementById('inventory-list');
     loadInventoryEntries(dbId(activeLibrary), invList);
@@ -1478,7 +1495,12 @@ document.getElementById('btn-save-box-photo').addEventListener('click', async ()
     await sb.from('box_photos').insert({ library_id: dbId(activeLibrary), photo_url: urlData.publicUrl });
     showToast('Photo saved — thanks!');
     document.getElementById('box-photo-modal').classList.remove('open');
-    loadBoxPhotos(dbId(activeLibrary), document.getElementById('box-photo-row'));
+    // Small delay so modal close animation completes before refreshing panel
+    // — prevents touch events bleeding through to the map and closing the panel
+    const libForPhoto = activeLibrary;
+    setTimeout(() => {
+      if (libForPhoto) loadBoxPhotos(dbId(libForPhoto), document.getElementById('box-photo-row'));
+    }, 350);
   } catch (err) {
     console.error(err);
     showToast('Could not save — please try again');
@@ -1587,10 +1609,12 @@ document.getElementById('btn-flag').addEventListener('click', () => {
   showToast('Problem reported — thanks for flagging this');
 });
 ['scan-modal', 'box-photo-modal', 'add-modal', 'faq-modal'].forEach(id => {
-  document.getElementById(id).addEventListener('click', e => {
-    if (e.target === document.getElementById(id)) {
-      document.getElementById(id).classList.remove('open');
-    }
+  const el = document.getElementById(id);
+  // Stop ALL clicks inside the modal from reaching the map underneath
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    // Only close if the backdrop itself was tapped, not the modal content
+    if (e.target === el) el.classList.remove('open');
   });
 });
 
