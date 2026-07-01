@@ -796,9 +796,9 @@ function initMap() {
 
 function makeMarkerIcon(lib, active = false, searchHit = false) {
   const classes = ['lfl-marker'];
-  // Check both the lib's id and its real DB id (_dbId for user-added libraries)
-  const dbId = lib._dbId || lib.id;
-  if (inventoriedIds.has(dbId) || inventoriedIds.has(lib.id)) classes.push('inventoried');
+  // For user-added libraries, check u_N string id; for seed libraries, check numeric id
+  // Never check raw _dbId integer for user-added libs — that would falsely green seed libraries sharing the same int
+  if (inventoriedIds.has(lib.id)) classes.push('inventoried');
   if (active) classes.push('active');
   if (searchHit) classes.push('search-hit');
   return L.divIcon({
@@ -839,7 +839,7 @@ function openPanel(lib, marker) {
   document.getElementById('panel-name').textContent = lib.name;
 
   const statusEl = document.getElementById('panel-status');
-  const hasInv = inventoriedIds.has(dbId(lib));
+  const hasInv = inventoriedIds.has(lib.id);
   statusEl.textContent = hasInv ? '✓ Inventoried' : '○ Not yet inventoried — be the first to scan it';
   statusEl.className = hasInv ? 'has-inventory' : 'empty';
 
@@ -885,11 +885,12 @@ function dbId(lib) {
 }
 
 function findLibraryByDbId(dbIdValue) {
-  // Find a library by its Supabase database id, checking both seed ids and user-added _dbId
-  return libraries.find(l => {
-    if (l._dbId !== undefined) return l._dbId === dbIdValue;  // user-added
-    return l.id === dbIdValue;  // seed library
-  });
+  // User-added libraries have _dbId set to their real Supabase id.
+  // Seed libraries use their id directly (1–1060, safely below the 2000 offset).
+  // Always prefer user-added match first in case of any future overlap.
+  const userAdded = libraries.find(l => l._dbId !== undefined && l._dbId === dbIdValue);
+  if (userAdded) return userAdded;
+  return libraries.find(l => l._dbId === undefined && l.id === dbIdValue);
 }
 
 async function loadInventoryEntries(libraryId, container) {
@@ -1410,7 +1411,7 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     });
     if (dbErr) throw dbErr;
 
-    inventoriedIds.add(dbId(activeLibrary));
+    inventoriedIds.add(activeLibrary.id);  // use local app id (u_N or numeric) not raw db integer
     refreshMarkerStyle(activeLibrary);
 
     showToast('Inventory saved — thank you!');
@@ -1610,10 +1611,15 @@ async function loadInventoriedIds() {
   const { data } = await sb.from('inventories').select('library_id');
   if (data) {
     data.forEach(row => {
-      inventoriedIds.add(row.library_id);  // raw db integer — matches seed lib ids directly
-      // Also add the local app id for user-added libraries (u_N)
-      const lib = findLibraryByDbId(row.library_id);
-      if (lib && lib._dbId !== undefined) inventoriedIds.add(lib.id);  // adds 'u_3' etc.
+      // Check if this library_id belongs to a user-added library first
+      const userLib = libraries.find(l => l._dbId !== undefined && l._dbId === row.library_id);
+      if (userLib) {
+        // Store the offset id (e.g. 2007) so only the user-added library turns green, not the seed with same int id
+        inventoriedIds.add(userLib.id);  // e.g. 2007, not 7
+      } else {
+        // Seed library — store raw integer
+        inventoriedIds.add(row.library_id);
+      }
     });
   }
 }
@@ -1626,17 +1632,17 @@ async function loadUserAddedLibraries() {
     .order('created_at', { ascending: true });
   if (error || !data) return;
 
-  // Use a string prefix to avoid collision with numeric libraries.json IDs
-  // The _dbId holds the real Supabase id used for inventory and photo lookups
+  // Offset user-added library ids by 2000 to avoid collision with seed library ids (1–1060).
+  // _dbId stores the real Supabase integer for all database queries.
   data.forEach((row) => {
     const lib = {
-      id: `u_${row.id}`,   // prefixed string id — won't collide with numeric seed ids
+      id: row.id + 2000,    // local app id — safely above seed range
       name: row.name,
       lat: row.lat,
       lng: row.lng,
       category: row.category || 'Little Free Libraries',
       photo: '',
-      _dbId: row.id,        // real DB id for all Supabase queries
+      _dbId: row.id,        // real Supabase id for inventory/photo queries
     };
     libraries.push(lib);
   });
