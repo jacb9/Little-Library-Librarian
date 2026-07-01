@@ -94,6 +94,40 @@
     .icon-btn.amber:active { background: var(--amber-light); }
     #header-spacer { flex: 1; }
 
+    /* Nearby library warning */
+    #nearby-warning {
+      display: none;
+      background: #fdf3dc;
+      border: 1.5px solid var(--amber);
+      border-radius: var(--radius);
+      padding: 13px 14px;
+      margin-bottom: 14px;
+    }
+    #nearby-warning.show { display: block; }
+    #nearby-warning p {
+      font-family: var(--font-ui);
+      font-size: 0.83rem;
+      color: var(--ink);
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+    #nearby-warning strong { color: var(--amber); }
+    .nearby-warning-btns { display: flex; gap: 8px; }
+    .nearby-warning-btns .btn-secondary { flex: 1; font-size: 0.78rem; padding: 8px 10px; }
+    .nearby-warning-btns .btn-ghost {
+      flex: 1;
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--ink-faint);
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(0,0,0,0.12);
+      background: white;
+      text-align: center;
+      cursor: pointer;
+    }
+
     /* FAQ modal specifics */
     .faq-item { margin-bottom: 16px; }
     .faq-item:last-child { margin-bottom: 0; }
@@ -319,10 +353,8 @@
     }
     .inventory-entry-photo {
       width: 100%;
-      max-height: 260px;
-      height: auto;
+      height: 160px;
       object-fit: cover;
-      object-postition: center-top;
       background: var(--green-pale);
     }
     .inventory-entry-body { padding: 12px 14px; }
@@ -681,6 +713,14 @@
     <button class="btn-secondary" style="width:100%;margin-bottom:16px" id="btn-get-location">
       📍 Use my current location
     </button>
+
+    <div id="nearby-warning">
+      <p id="nearby-warning-text"></p>
+      <div class="nearby-warning-btns">
+        <button class="btn-secondary" id="btn-check-map">👀 Check the map</button>
+        <button class="btn-ghost" id="btn-confirm-different">It's a different library</button>
+      </div>
+    </div>
 
     <button class="btn-primary" style="width:100%" id="btn-submit-new">Add to map</button>
   </div>
@@ -1517,6 +1557,11 @@ document.getElementById('btn-save-box-photo').addEventListener('click', async ()
 // ═════════════════════════════════════════════════════════════
 document.getElementById('add-btn').addEventListener('click', () => {
   newLibraryLatLng = null;
+  nearbyWarningLib = null;
+  document.getElementById('nearby-warning').classList.remove('show');
+  const submitBtn = document.getElementById('btn-submit-new');
+  submitBtn.style.opacity = '';
+  submitBtn.disabled = false;
   document.getElementById('add-modal').classList.add('open');
 });
 document.getElementById('faq-btn').addEventListener('click', () => {
@@ -1541,12 +1586,59 @@ document.getElementById('add-photo-input').addEventListener('change', e => {
   img.src = URL.createObjectURL(file);
   zone.appendChild(img);
 });
+const NEARBY_THRESHOLD_M = 25;
+let nearbyWarningLib = null;  // library triggering the warning, if any
+
+function checkNearbyLibraries(lat, lng) {
+  const closest = libraries
+    .map(l => ({ lib: l, dist: getDistance(lat, lng, l.lat, l.lng) }))
+    .filter(l => l.dist <= NEARBY_THRESHOLD_M)
+    .sort((a, b) => a.dist - b.dist)[0];
+
+  const warningEl = document.getElementById('nearby-warning');
+  const submitBtn = document.getElementById('btn-submit-new');
+
+  if (closest) {
+    nearbyWarningLib = closest.lib;
+    document.getElementById('nearby-warning-text').innerHTML =
+      `There's already a library nearby: <strong>${escapeHtml(closest.lib.name)}</strong> ` +
+      `(${Math.round(closest.dist)}m away).<br>` +
+      `Were you looking to scan its shelf or add a photo instead?`;
+    warningEl.classList.add('show');
+    submitBtn.style.opacity = '0.4';
+    submitBtn.disabled = true;
+  } else {
+    nearbyWarningLib = null;
+    warningEl.classList.remove('show');
+    submitBtn.style.opacity = '';
+    submitBtn.disabled = false;
+  }
+}
+
+document.getElementById('btn-check-map').addEventListener('click', () => {
+  const lib = nearbyWarningLib;
+  document.getElementById('add-modal').classList.remove('open');
+  if (lib) {
+    map.flyTo([lib.lat, lib.lng], 17, { duration: 0.8 });
+    setTimeout(() => openPanel(lib, lib._marker), 600);
+  }
+});
+
+document.getElementById('btn-confirm-different').addEventListener('click', () => {
+  nearbyWarningLib = null;
+  document.getElementById('nearby-warning').classList.remove('show');
+  const submitBtn = document.getElementById('btn-submit-new');
+  submitBtn.style.opacity = '';
+  submitBtn.disabled = false;
+});
+
 document.getElementById('btn-get-location').addEventListener('click', () => {
   if (!navigator.geolocation) { showToast('Location not available'); return; }
   navigator.geolocation.getCurrentPosition(pos => {
     newLibraryLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     document.getElementById('new-location-status').textContent =
       `✓ Got your location (${newLibraryLatLng.lat.toFixed(5)}, ${newLibraryLatLng.lng.toFixed(5)})`;
+    checkNearbyLibraries(newLibraryLatLng.lat, newLibraryLatLng.lng);
   }, () => showToast('Could not get location'));
 });
 document.getElementById('btn-submit-new').addEventListener('click', async () => {
