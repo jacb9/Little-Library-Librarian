@@ -94,6 +94,33 @@
     .icon-btn.amber:active { background: var(--amber-light); }
     #header-spacer { flex: 1; }
 
+    /* Amazon buy link on no-results screen */
+    .buy-link-wrap {
+      margin-top: 20px;
+      text-align: center;
+    }
+    .buy-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #ff9900;
+      color: #111;
+      font-family: var(--font-ui);
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 11px 22px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .buy-link:active { background: #e68a00; }
+    .buy-link-disclosure {
+      margin-top: 8px;
+      font-family: var(--font-ui);
+      font-size: 0.68rem;
+      color: var(--ink-faint);
+    }
+
     /* Nearby library warning */
     #nearby-warning {
       display: none;
@@ -789,6 +816,10 @@ const SUPABASE_ENABLED = true;
 const EXTRACTION_ENDPOINT = 'https://oatcxoizznsnttlerfjo.supabase.co/functions/v1/extract-titles';
 const EXTRACTION_ENABLED = true;
 
+// Amazon Associates affiliate tag — fill in once approved at associates.amazon.ca
+// Leave empty to hide the buy link entirely (no broken or untracked links before approval)
+const AMAZON_TAG = '';  // e.g. 'lll-20'
+
 let sb = null;
 if (SUPABASE_ENABLED) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1069,10 +1100,21 @@ async function runSearch(query) {
 
   if (matches.length === 0) {
     metaDiv.textContent = `No matches for "${query}"`;
+    const amazonUrl = AMAZON_TAG
+      ? `https://www.amazon.ca/s?k=${encodeURIComponent(query)}&tag=${encodeURIComponent(AMAZON_TAG)}`
+      : null;
+    const buyBlock = amazonUrl ? `
+      <div class="buy-link-wrap">
+        <a class="buy-link" href="${amazonUrl}" target="_blank" rel="noopener noreferrer">
+          🛒 Find it on Amazon.ca
+        </a>
+        <p class="buy-link-disclosure">As an Amazon Associate we earn from qualifying purchases.</p>
+      </div>` : '';
     listDiv.innerHTML = `
       <div class="empty-state">
         <span class="icon">📭</span>
         No libraries currently show this title.<br>Try a shorter search, or check back as more shelves get scanned.
+        ${buyBlock}
       </div>`;
     return;
   }
