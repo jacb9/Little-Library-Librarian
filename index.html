@@ -256,6 +256,14 @@
       padding: 3px 9px;
       border-radius: 12px;
       font-size: 0.72rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .result-loc-dist {
+      color: var(--ink-faint);
+      font-size: 0.68rem;
+      font-weight: normal;
     }
 
     /* ── Library Panel ────────────────────────────────────────── */
@@ -730,7 +738,7 @@
 // CONFIGURATION
 // ═════════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://oatcxoizznsnttlerfjo.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreVJynV2be9w_sXYuw1ek';
+const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreV';
 const SUPABASE_ENABLED = true;
 
 // AI vision extraction — set your endpoint here.
@@ -876,6 +884,14 @@ function dbId(lib) {
   return lib._dbId || lib.id;
 }
 
+function findLibraryByDbId(dbIdValue) {
+  // Find a library by its Supabase database id, checking both seed ids and user-added _dbId
+  return libraries.find(l => {
+    if (l._dbId !== undefined) return l._dbId === dbIdValue;  // user-added
+    return l.id === dbIdValue;  // seed library
+  });
+}
+
 async function loadInventoryEntries(libraryId, container) {
   container.innerHTML = `<div class="empty-state"><span class="icon">⏳</span></div>`;
   const { data, error } = await sb
@@ -1019,30 +1035,66 @@ async function runSearch(query) {
   }
 
   metaDiv.textContent = `${matches.length} possible match${matches.length > 1 ? 'es' : ''} for "${query}"`;
-  listDiv.innerHTML = matches.map(m => {
-    const libs = m.libraryIds.map(id => {
-      const lib = libraries.find(l => l.id === id);
-      return lib ? `<span class="result-loc-pill">${lib.name}</span>` : '';
+
+  // Sort each match's library list by distance if location is known
+  const sortedMatches = matches.map(m => {
+    const libsWithDist = m.libraryIds
+      .map(id => {
+        const lib = findLibraryByDbId(id) || libraries.find(l => l.id === id);
+        if (!lib) return null;
+        const dist = userLocation
+          ? getDistance(userLocation.lat, userLocation.lng, lib.lat, lib.lng)
+          : null;
+        return { lib, dist };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a.dist === null || b.dist === null) return 0;
+        return a.dist - b.dist;
+      });
+    return { ...m, libsWithDist };
+  });
+
+  // Sort matches themselves: first by match quality, then by distance of nearest library
+  sortedMatches.sort((a, b) => {
+    const order = { 'Exact match': 0, 'Close match': 1, 'Possible match': 2 };
+    const qualityDiff = order[a.matchQuality] - order[b.matchQuality];
+    if (qualityDiff !== 0) return qualityDiff;
+    if (userLocation && a.libsWithDist[0]?.dist != null && b.libsWithDist[0]?.dist != null) {
+      return a.libsWithDist[0].dist - b.libsWithDist[0].dist;
+    }
+    return 0;
+  });
+
+  listDiv.innerHTML = sortedMatches.map(m => {
+    const pills = m.libsWithDist.map(({ lib, dist }) => {
+      const distStr = dist !== null
+        ? `<span class="result-loc-dist">${dist < 1000 ? Math.round(dist) + 'm' : (dist/1000).toFixed(1) + 'km'}</span>`
+        : '';
+      return `<span class="result-loc-pill">${escapeHtml(lib.name)}${distStr}</span>`;
     }).join('');
     return `
       <div class="result-card" data-title="${escapeHtml(m.title)}">
         <div class="result-title">${escapeHtml(m.title)}</div>
-        <div class="result-match">${m.matchQuality}</div>
-        <div class="result-locations">${libs}</div>
+        <div class="result-match">${m.matchQuality}${userLocation ? ' · sorted by distance' : ''}</div>
+        <div class="result-locations">${pills}</div>
       </div>`;
   }).join('');
 
   // Highlight matched libraries on map
-  const hitIds = new Set(matches.flatMap(m => m.libraryIds));
+  const hitIds = new Set(sortedMatches.flatMap(m => m.libsWithDist.map(({ lib }) => dbId(lib))));
   libraries.forEach(lib => {
-    if (lib._marker) lib._marker.setIcon(makeMarkerIcon(lib, false, hitIds.has(lib.id) || hitIds.has(lib._dbId)));
+    if (lib._marker) lib._marker.setIcon(makeMarkerIcon(lib, false, 
+        hitIds.has(lib.id) || (lib._dbId !== undefined && hitIds.has(lib._dbId))));
   });
 
   // Tap a result to jump to map + open nearest matching library
   listDiv.querySelectorAll('.result-card').forEach((card, i) => {
     card.addEventListener('click', () => {
-      const match = matches[i];
-      const lib = libraries.find(l => l.id === match.libraryIds[0]);
+      const match = sortedMatches[i];
+      // Pick the nearest library (first after distance sort)
+      const nearest = match.libsWithDist[0];
+      const lib = nearest?.lib;
       if (lib) {
         document.getElementById('search-bar').classList.remove('open');
         closeSearchResults();
@@ -1556,7 +1608,14 @@ function showToast(msg) {
 async function loadInventoriedIds() {
   if (!SUPABASE_ENABLED) return;
   const { data } = await sb.from('inventories').select('library_id');
-  if (data) data.forEach(row => inventoriedIds.add(row.library_id));
+  if (data) {
+    data.forEach(row => {
+      inventoriedIds.add(row.library_id);  // raw db integer — matches seed lib ids directly
+      // Also add the local app id for user-added libraries (u_N)
+      const lib = findLibraryByDbId(row.library_id);
+      if (lib && lib._dbId !== undefined) inventoriedIds.add(lib.id);  // adds 'u_3' etc.
+    });
+  }
 }
 
 async function loadUserAddedLibraries() {
