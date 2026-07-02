@@ -9,8 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Little Library Librarian">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="favicon.ico">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Little Library Librarian · Greater Victoria</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -544,6 +543,35 @@
     #extract-loading p { font-family: var(--font-ui); font-size: 0.85rem; color: var(--ink-mid); margin-top: 10px; }
 
     #extract-review { display: none; }
+    #low-confidence-nudge {
+      display: none;
+      background: #fdf3dc;
+      border: 1.5px solid var(--amber);
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-family: var(--font-ui);
+      font-size: 0.78rem;
+      color: var(--ink-mid);
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+    #low-confidence-nudge.show { display: block; }
+    #btn-retake {
+      width: 100%;
+      margin-top: 8px;
+      background: var(--green-pale);
+      color: var(--green);
+      border-radius: 8px;
+      padding: 11px 12px;
+      font-family: var(--font-ui);
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1.5px solid var(--green);
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #btn-retake:active { background: #dde8dd; }
     #extract-review.show { display: block; }
     #extract-review .hint {
       font-family: var(--font-ui);
@@ -680,6 +708,9 @@
     </div>
 
     <div id="extract-review">
+      <div id="low-confidence-nudge">
+        📷 We only spotted a few titles — if the shelf has more books, a retake with better lighting or a wider angle might help.
+      </div>
       <p class="hint">Here's what we found. Tap ✕ to remove a title, edit any text that's wrong, or add a title we missed below.</p>
       <div class="edit-chip-list" id="edit-chip-list"></div>
       <div id="add-title-row">
@@ -687,6 +718,7 @@
         <button id="add-title-btn">Add</button>
       </div>
       <button class="btn-primary" id="btn-save-inventory" style="width:100%">Save this inventory</button>
+      <button id="btn-retake">📷 Retake photo</button>
     </div>
   </div>
 </div>
@@ -1441,6 +1473,9 @@ function fileToBase64(file) {
 function renderEditChips() {
   const list = document.getElementById('edit-chip-list');
   list.innerHTML = '';
+  // Show low-confidence nudge if fewer than 4 titles found
+  const nudge = document.getElementById('low-confidence-nudge');
+  if (nudge) nudge.classList.toggle('show', extractedTitles.length < 4);
   extractedTitles.forEach((item, idx) => {
     const chip = document.createElement('div');
     chip.className = 'edit-chip' + (item.edited ? ' edited' : '');
@@ -1466,6 +1501,20 @@ function renderEditChips() {
     });
   });
 }
+
+document.getElementById('btn-retake').addEventListener('click', () => {
+  // Reset everything back to the photo-taking state without closing the modal
+  extractedTitles = [];
+  pendingScanPhoto = null;
+  document.getElementById('scan-photo-input').value = '';
+  resetUploadZoneVisual('scan-upload-zone');
+  document.getElementById('extract-review').classList.remove('show');
+  document.getElementById('extract-loading').classList.remove('show');
+  document.getElementById('low-confidence-nudge').classList.remove('show');
+  // Reset loading message
+  const msgEl = document.getElementById('extract-loading-msg');
+  if (msgEl) msgEl.textContent = 'Sending photo…';
+});
 
 document.getElementById('add-title-btn').addEventListener('click', () => {
   const input = document.getElementById('add-title-input');
