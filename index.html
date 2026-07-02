@@ -430,15 +430,29 @@
       font-size: 0.86rem;
       color: var(--ink-faint);
       display: block;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
       cursor: pointer;
       border: 1.5px dashed var(--ghost);
       transition: background 0.15s, border-color 0.15s;
     }
     .box-photo-empty:active { background: #d8dbd4; border-color: var(--green); color: var(--green); }
     .box-photo-empty .empty-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+
+    .inventory-empty-btn {
+      width: 100%;
+      background: var(--ghost-pale);
+      border: 1.5px dashed var(--ghost);
+      border-radius: 8px;
+      padding: 20px 16px;
+      text-align: center;
+      font-family: var(--font-ui);
+      font-size: 0.86rem;
+      color: var(--ink-faint);
+      cursor: pointer;
+      line-height: 1.55;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .inventory-empty-btn:active { background: #d8dbd4; border-color: var(--green); color: var(--green); }
+    .inventory-empty-btn .empty-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
 
     #panel-actions {
       position: absolute;
@@ -682,7 +696,7 @@
     <div id="inventory-list"></div>
   </div>
   <div id="panel-actions">
-    <button class="btn-primary" id="btn-scan-shelf">📷 Scan the shelf</button>
+    <button class="btn-primary" id="btn-scan-shelf">📷 Scan shelf to update inventory</button>
     <button class="btn-secondary" id="btn-add-box-photo" title="Update library box photo">🏡 Update box photo</button>
     <button class="btn-secondary" id="btn-flag">🚩</button>
   </div>
@@ -844,7 +858,7 @@
 // CONFIGURATION
 // ═════════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://oatcxoizznsnttlerfjo.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreVJynV2be9w_sXYuw1ek';
+const SUPABASE_ANON_KEY = 'sb_publishable_uOiMLlWHmmreV';
 const SUPABASE_ENABLED = true;
 
 // AI vision extraction — set your endpoint here.
@@ -1014,11 +1028,11 @@ async function loadInventoryEntries(libraryId, container) {
 
   if (error || !data || data.length === 0) {
     container.innerHTML = `
-      <div class="empty-state">
-        <span class="icon">📷</span>
+      <button class="inventory-empty-btn" onclick="document.getElementById('btn-scan-shelf').click()">
+        <span class="empty-icon">📷</span>
         <strong>No inventory yet.</strong><br>
-        Tap "Scan the shelf" below to be the first.
-      </div>`;
+        Tap here to be the first to scan the shelf.
+      </button>`;
     return;
   }
 
