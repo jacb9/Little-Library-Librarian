@@ -422,14 +422,14 @@
     .box-photo-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 4px; }
     .box-photo-row img { width: 100px; height: 76px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
     .box-photo-empty {
-      width: 100%; padding: 14px 18px;
+      width: 100%; padding: 20px 16px;
       background: var(--ghost-pale);
       border-radius: 8px;
       text-align: center;
       font-family: var(--font-ui);
-      font-size: 0.78rem;
+      font-size: 0.86rem;
       color: var(--ink-faint);
-      display: flex;
+      display: block;
       align-items: center;
       justify-content: center;
       gap: 8px;
@@ -438,7 +438,7 @@
       transition: background 0.15s, border-color 0.15s;
     }
     .box-photo-empty:active { background: #d8dbd4; border-color: var(--green); color: var(--green); }
-    .box-photo-empty .empty-icon { font-size: 1.1rem; }
+    .box-photo-empty .empty-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
 
     #panel-actions {
       position: absolute;
