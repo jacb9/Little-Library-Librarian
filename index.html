@@ -433,7 +433,11 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
+      cursor: pointer;
+      border: 1.5px dashed var(--ghost);
+      transition: background 0.15s, border-color 0.15s;
     }
+    .box-photo-empty:active { background: #d8dbd4; border-color: var(--green); color: var(--green); }
     .box-photo-empty .empty-icon { font-size: 1.1rem; }
 
     #panel-actions {
@@ -679,7 +683,7 @@
   </div>
   <div id="panel-actions">
     <button class="btn-primary" id="btn-scan-shelf">📷 Scan the shelf</button>
-    <button class="btn-secondary" id="btn-add-box-photo">🏡</button>
+    <button class="btn-secondary" id="btn-add-box-photo" title="Update library box photo">🏡 Update photo</button>
     <button class="btn-secondary" id="btn-flag">🚩</button>
   </div>
 </div>
@@ -817,8 +821,8 @@
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-label">To add a photo of the library box</div>
-      <div class="faq-item-body">Open a library, then tap <span class="faq-icon-inline">🏡</span> at the bottom of the screen.</div>
+      <div class="faq-item-label">To add or update a photo of the library box</div>
+      <div class="faq-item-body">Open a library and tap the <span class="faq-icon-inline">📷 Add a photo of this library</span> placeholder — or tap <span class="faq-icon-inline">🏡 Update photo</span> at the bottom of the screen to replace an existing photo.</div>
     </div>
 
     <div class="faq-item">
@@ -953,7 +957,7 @@ function openPanel(lib, marker) {
   const boxRow = document.getElementById('box-photo-row');
   // Always start with the empty state — Supabase box photos load via loadBoxPhotos below.
   // We deliberately ignore seed Google URLs since they expire and aren't owned by us.
-  boxRow.innerHTML = `<div class="box-photo-empty"><span class="empty-icon">🏡</span>No photo yet — be the first to add one</div>`;
+  boxRow.innerHTML = `<button class="box-photo-empty" id="btn-empty-box-photo" onclick="document.getElementById('btn-add-box-photo').click()"><span class="empty-icon">📷</span>Add a photo of this library</button>`;
 
   // Inventory list
   const invList = document.getElementById('inventory-list');
@@ -1040,11 +1044,10 @@ async function loadBoxPhotos(libraryId, container) {
     .select('*')
     .eq('library_id', libraryId)
     .order('created_at', { ascending: false })
-    .limit(2);
+    .limit(1);
   if (!data || data.length === 0) return;
-  // Replace container entirely with Supabase photos — clears seed photo or placeholder
-  const imgs = data.map(p => `<img src="${p.photo_url}" alt="Library box" loading="lazy">`).join('');
-  container.innerHTML = imgs;
+  // Always show only the most recent box photo — newest effectively replaces older ones
+  container.innerHTML = `<img src="${data[0].photo_url}" alt="Library box" loading="lazy">`;
 }
 
 function escapeHtml(s) {
