@@ -1072,8 +1072,8 @@ function openPanel(lib, marker) {
     invList.innerHTML = `
       <div class="empty-state">
         <span class="icon">📷</span>
-        <strong>The books in the Little Library are ready for new homes, but no one knows they're here yet.</strong><br>
-        Scan the shelf below and help them be someone's next read.
+        <strong>These books are ready for new homes, but no one knows they're here yet.</strong><br>
+        Scan the shelf below and help one find its next reader.
       </div>`;
   }
 
@@ -1120,8 +1120,8 @@ async function loadInventoryEntries(libraryId, container) {
     container.innerHTML = `
       <button class="inventory-empty-btn" onclick="document.getElementById('btn-scan-shelf').click()">
         <span class="empty-icon">📷</span>
-        <strong>The books in the Little Library are ready for new homes, but no one knows they're here yet.</strong><br>
-        Tap here to scan the shelf and help them be someone's next read.
+        <strong>These books are ready for new homes, but no one knows they're here yet.</strong><br>
+        Tap to scan the shelf and help one find its next reader.
       </button>`;
     return;
   }
