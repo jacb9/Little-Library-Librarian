@@ -1683,11 +1683,12 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     refreshMarkerStyle(activeLibrary);
 
     showToast('Inventory saved — thank you!');
-    afterSuccessfulScan(); // increments lll_scan_count synchronously
+    const savedLibrary = activeLibrary; // capture now — activeLibrary may change before the delayed follow-up fires
+    const scanCount = recordScanAndGetCount(); // increments synchronously so the tally is accurate
     setTimeout(() => {
-      const tally = parseInt(localStorage.getItem('lll_scan_count') || '0', 10);
-      showToast(`That's ${tally} ${tally === 1 ? 'library' : 'libraries'} you've scanned!`);
+      showToast(`That's ${scanCount} ${scanCount === 1 ? 'library' : 'libraries'} you've scanned!`);
     }, 1500);
+    setTimeout(() => runPostScanFollowUp(savedLibrary, scanCount), 3200);
     // Small delay before closing so touch events don't bleed to the map
     setTimeout(() => document.getElementById('scan-modal').classList.remove('open'), 100);
 
@@ -2013,40 +2014,62 @@ function promptInstall() {
 }
 
 // Called once per successful inventory save
-function afterSuccessfulScan() {
+function recordScanAndGetCount() {
   if (isStandalone()) localStorage.setItem('lll_installed', '1');
-  const isInstalled = localStorage.getItem('lll_installed') === '1';
-
   const count = (parseInt(localStorage.getItem('lll_scan_count') || '0', 10)) + 1;
   localStorage.setItem('lll_scan_count', String(count));
+  return count;
+}
 
-  // Give the "Inventory saved" and tally toasts time to clear before nudging
-  setTimeout(() => {
-    if (count === 1 && !isInstalled && !localStorage.getItem('lll_install_prompted')) {
-      localStorage.setItem('lll_install_prompted', '1');
-      showEngagementBanner({
-        text: 'Nice first scan! Add this to your home screen so it\'s one tap away next time.',
-        actionLabel: 'Add to home screen',
-        onAction: promptInstall,
-      });
-      return;
-    }
-    if (count === 2) {
-      showEngagementBanner({
-        text: 'The more people scanning, the more books turn up when you search. Invite someone to add to it?',
-        actionLabel: 'Share',
-        onAction: doShare,
-      });
-      return;
-    }
-    if (SHARE_MILESTONES.includes(count)) {
-      showEngagementBanner({
-        text: `${count} libraries scanned! Every friend you bring in means more books you can find near you too.`,
-        actionLabel: 'Share',
-        onAction: doShare,
-      });
-    }
-  }, 3200);
+function showPostScanNudge(count) {
+  const isInstalled = localStorage.getItem('lll_installed') === '1';
+  if (count === 1 && !isInstalled && !localStorage.getItem('lll_install_prompted')) {
+    localStorage.setItem('lll_install_prompted', '1');
+    showEngagementBanner({
+      text: 'Nice first scan! Add this to your home screen so it\'s one tap away next time.',
+      actionLabel: 'Add to home screen',
+      onAction: promptInstall,
+    });
+    return;
+  }
+  if (count === 2) {
+    showEngagementBanner({
+      text: 'The more people scanning, the more books turn up when you search. Invite someone to add to it?',
+      actionLabel: 'Share',
+      onAction: doShare,
+    });
+    return;
+  }
+  if (SHARE_MILESTONES.includes(count)) {
+    showEngagementBanner({
+      text: `${count} libraries scanned! Every friend you bring in means more books you can find near you too.`,
+      actionLabel: 'Share',
+      onAction: doShare,
+    });
+  }
+}
+
+// After a save, offer the box photo first if this library doesn't have one yet —
+// that's the direct continuation of the scan just completed. Only fall back to the
+// install/share nudge when there's no photo gap to close, so we never stack two asks.
+async function runPostScanFollowUp(library, count) {
+  let needsBoxPhoto = false;
+  if (SUPABASE_ENABLED) {
+    const { data } = await sb.from('box_photos').select('id').eq('library_id', dbId(library)).limit(1);
+    needsBoxPhoto = !data || data.length === 0;
+  }
+  if (needsBoxPhoto) {
+    showEngagementBanner({
+      text: 'Got a second? A photo of the library itself helps others spot it on the street.',
+      actionLabel: 'Add a photo',
+      onAction: () => {
+        activeLibrary = library; // in case the user navigated elsewhere before tapping this
+        document.getElementById('btn-add-box-photo').click();
+      },
+    });
+  } else {
+    showPostScanNudge(count);
+  }
 }
 
 // ═════════════════════════════════════════════════════════════
