@@ -745,6 +745,7 @@
   </div>
   <div id="panel-actions">
     <button class="btn-primary" id="btn-scan-shelf">📷 Scan shelf to update inventory</button>
+    <button class="btn-secondary" id="btn-add-box-photo" title="Update library box photo" onclick="openBoxPhotoModal()">🏡 Update box photo</button>
     <button class="btn-secondary" id="btn-flag">🚩</button>
   </div>
 </div>
@@ -885,7 +886,7 @@
     <h2>How this works</h2>
 
     <div class="faq-legend">
-      <div class="faq-legend-row"><span class="faq-dot ghost"></span> Libraries we know exist but haven't been scanned yet</div>
+      <div class="faq-legend-row"><span class="faq-dot ghost"></span> Libraries we know exist but haven't been scanned yet — still waiting for their moment</div>
       <div class="faq-legend-row"><span class="faq-dot green"></span> Libraries with at least one inventory on record</div>
     </div>
 
@@ -901,7 +902,7 @@
 
     <div class="faq-item">
       <div class="faq-item-label">To search all libraries</div>
-      <div class="faq-item-body">Tap <span class="faq-icon-inline">🔍</span> at the top of the screen and type a title or author. We'll show you every library where that book's been spotted recently, sorted by distance from you.</div>
+      <div class="faq-item-body">Tap <span class="faq-icon-inline">🔍</span> at the top of the screen and type a title or author. We'll show you every library where that book's been spotted recently, sorted by distance from you — no more driving to three libraries hoping one has it.</div>
     </div>
 
     <div class="faq-item">
@@ -911,12 +912,17 @@
 
     <div class="faq-item">
       <div class="faq-item-label">To add or update a photo of the library box</div>
-      <div class="faq-item-body">Open a library and tap the <span class="faq-icon-inline">📷 Add a photo of this library</span> placeholder — or tap <span class="faq-icon-inline">🏡 Update photo</span> at the bottom of the screen to replace an existing photo.</div>
+      <div class="faq-item-body">Open a library and tap <span class="faq-icon-inline">🏡 Update box photo</span> at the bottom of the screen.</div>
     </div>
 
     <div class="faq-item">
       <div class="faq-item-label">To add an inventory</div>
       <div class="faq-item-body">Tap a pin to open the library, then tap "<span class="faq-icon-inline">📷 Scan the shelf</span>" and take a photo. We'll read the spines automatically — you can fix anything we got wrong before saving. <em>For best results, step back to get the whole interior in frame — one photo of both shelves beats two close-ups.</em></div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-label">To see your stats</div>
+      <div class="faq-item-body">Tap <span class="faq-icon-inline">📊</span> at the top of the screen to see how many libraries you've scanned, how many books you've helped catalogue, and how many friends you've roped into this. All counted from scans made on your own device — no account needed.</div>
     </div>
 
     <div class="faq-item">
@@ -1055,7 +1061,7 @@ function openPanel(lib, marker) {
   const boxRow = document.getElementById('box-photo-row');
   // Always start with the empty state — Supabase box photos load via loadBoxPhotos below.
   // We deliberately ignore seed Google URLs since they expire and aren't owned by us.
-  boxRow.innerHTML = `<button class="box-photo-empty" id="btn-empty-box-photo" onclick="openBoxPhotoModal()"><span class="empty-icon">📷</span>Add a photo of this library</button>`;
+  boxRow.innerHTML = ''; // no photo yet — nothing shown here now; use "Update box photo" below to add one
 
   // Inventory list
   const invList = document.getElementById('inventory-list');
@@ -1066,8 +1072,8 @@ function openPanel(lib, marker) {
     invList.innerHTML = `
       <div class="empty-state">
         <span class="icon">📷</span>
-        <strong>No inventory yet.</strong><br>
-        Tap "Scan the shelf" below to be the first.
+        <strong>These books in this Little Library are ready for a new home.</strong><br>
+        Scan the shelf below so someone can find them.
       </div>`;
   }
 
@@ -1114,8 +1120,8 @@ async function loadInventoryEntries(libraryId, container) {
     container.innerHTML = `
       <button class="inventory-empty-btn" onclick="document.getElementById('btn-scan-shelf').click()">
         <span class="empty-icon">📷</span>
-        <strong>No inventory yet.</strong><br>
-        Tap here to be the first to scan the shelf.
+        <strong>These books in this Little Library are ready for a new home.</strong><br>
+        Tap here to scan the shelf so someone can find them and take one.
       </button>`;
     return;
   }
