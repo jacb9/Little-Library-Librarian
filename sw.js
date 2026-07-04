@@ -1,5 +1,5 @@
 // sw.js — Little Library Librarian service worker
-const CACHE = 'lll-v3';
+const CACHE = 'lll-v4';
 const PRECACHE = ['.', 'index.html', 'libraries.json', 'manifest.json'];
 
 self.addEventListener('install', e => {
