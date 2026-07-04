@@ -2192,7 +2192,9 @@ boot();
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.update(); // actively check for a newer sw.js on every load, rather than waiting on the browser's own ~24hr cycle
+    }).catch(() => {});
   });
 }
 </script>
