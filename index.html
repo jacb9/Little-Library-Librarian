@@ -745,7 +745,6 @@
   </div>
   <div id="panel-actions">
     <button class="btn-primary" id="btn-scan-shelf">📷 Scan shelf to update inventory</button>
-    <button class="btn-secondary" id="btn-add-box-photo" title="Update library box photo">🏡 Update box photo</button>
     <button class="btn-secondary" id="btn-flag">🚩</button>
   </div>
 </div>
@@ -1056,7 +1055,7 @@ function openPanel(lib, marker) {
   const boxRow = document.getElementById('box-photo-row');
   // Always start with the empty state — Supabase box photos load via loadBoxPhotos below.
   // We deliberately ignore seed Google URLs since they expire and aren't owned by us.
-  boxRow.innerHTML = `<button class="box-photo-empty" id="btn-empty-box-photo" onclick="document.getElementById('btn-add-box-photo').click()"><span class="empty-icon">📷</span>Add a photo of this library</button>`;
+  boxRow.innerHTML = `<button class="box-photo-empty" id="btn-empty-box-photo" onclick="openBoxPhotoModal()"><span class="empty-icon">📷</span>Add a photo of this library</button>`;
 
   // Inventory list
   const invList = document.getElementById('inventory-list');
@@ -1146,7 +1145,7 @@ async function loadBoxPhotos(libraryId, container) {
     .limit(1);
   if (!data || data.length === 0) return;
   // Always show only the most recent box photo — newest effectively replaces older ones
-  container.innerHTML = `<img src="${data[0].photo_url}" alt="Library box" loading="lazy">`;
+  container.innerHTML = `<img src="${data[0].photo_url}" alt="Library box" loading="lazy" style="cursor:pointer" onclick="openBoxPhotoModal()">`;
 }
 
 function escapeHtml(s) {
@@ -1710,13 +1709,13 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
 // ═════════════════════════════════════════════════════════════
 // Box photo flow
 // ═════════════════════════════════════════════════════════════
-document.getElementById('btn-add-box-photo').addEventListener('click', () => {
+function openBoxPhotoModal() {
   pendingBoxPhoto = null;
   document.getElementById('box-photo-input').value = '';
   resetUploadZoneVisual('box-upload-zone');
   buildLocationConfirm('box-confirm-cards');
   document.getElementById('box-photo-modal').classList.add('open');
-});
+}
 document.getElementById('box-photo-close').addEventListener('click', () => {
   document.getElementById('box-photo-modal').classList.remove('open');
 });
@@ -1995,17 +1994,21 @@ function incrementShareCount() {
 }
 
 function doShare() {
+  const message = "Love little free libraries like me? This app makes them searchable — the more of us scanning, the more books turn up. Join me?";
+  const link = 'https://littlelibrarylibrarian.com';
+  // Some share targets (Mail apps especially) ignore the separate `text` and/or `title`
+  // fields and only keep `url`. Folding everything into one string makes the message
+  // survive in those apps too, since it's more likely to land wherever the app puts the body.
   const shareData = {
     title: 'Little Library Librarian',
-    text: "Love little free libraries like me? This app makes them searchable — the more of us scanning, the more books turn up. Join me?",
-    url: 'https://littlelibrarylibrarian.com',
+    text: `${message}\n\n${link}`,
   };
   if (navigator.share) {
     navigator.share(shareData).then(incrementShareCount).catch(() => {}); // user cancelling isn't an error, and isn't counted
   } else {
-    navigator.clipboard.writeText(shareData.url)
-      .then(() => { showToast('Link copied — paste it anywhere!'); incrementShareCount(); })
-      .catch(() => showToast(shareData.url));
+    navigator.clipboard.writeText(shareData.text)
+      .then(() => { showToast('Message copied — paste it anywhere!'); incrementShareCount(); })
+      .catch(() => showToast(link));
   }
 }
 
@@ -2071,7 +2074,7 @@ async function runPostScanFollowUp(library, count) {
       actionLabel: 'Add a photo',
       onAction: () => {
         activeLibrary = library; // in case the user navigated elsewhere before tapping this
-        document.getElementById('btn-add-box-photo').click();
+        openBoxPhotoModal();
       },
     });
   } else {
