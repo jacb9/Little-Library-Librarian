@@ -1977,6 +1977,12 @@ function showEngagementBanner({ text, actionLabel, onAction }) {
   primaryBtn.textContent = actionLabel;
   primaryBtn.onclick = () => { onAction(); hideEngagementBanner(); };
   document.getElementById('engagement-banner-dismiss').onclick = hideEngagementBanner;
+
+  // The library panel's action bar (scan/box-photo/flag) sits at the very bottom of the
+  // screen too — if the panel is open, lift the banner above it instead of covering it.
+  const panelOpen = document.getElementById('panel').classList.contains('open');
+  banner.style.bottom = panelOpen ? '92px' : '20px';
+
   banner.classList.add('show');
 }
 function hideEngagementBanner() {
