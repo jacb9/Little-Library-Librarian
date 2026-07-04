@@ -1507,10 +1507,11 @@ async function runExtraction(file) {
 
   // Cycle through messages so slow connections don't feel broken
   const loadingMessages = [
-    'Sending photo…',
-    'Reading the spines…',
-    'Still working — slow connection?',
-    'Almost there…',
+    'Squinting at spines…',
+    'Sounding out the titles…',
+    'Judging a few books by their covers…',
+    'Still reading — some spines are tricky…',
+    'Nearly done cataloguing…',
   ];
   let msgIdx = 0;
   const msgEl = document.getElementById('extract-loading-msg');
@@ -1518,7 +1519,7 @@ async function runExtraction(file) {
   const msgInterval = setInterval(() => {
     msgIdx = Math.min(msgIdx + 1, loadingMessages.length - 1);
     if (msgEl) msgEl.textContent = loadingMessages[msgIdx];
-  }, 4000);
+  }, 3000);
 
   if (!EXTRACTION_ENABLED) {
     // Demo fallback so the review UI can be tested without a live endpoint
