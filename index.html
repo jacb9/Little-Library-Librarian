@@ -2158,6 +2158,14 @@ async function loadInventoriedIds() {
   }
 }
 
+// Total books found across every scan, by everyone — used for the boot-time toast
+async function getGlobalBookCount() {
+  if (!SUPABASE_ENABLED) return 0;
+  const { data, error } = await sb.from('inventories').select('titles');
+  if (error || !data) return 0;
+  return data.reduce((sum, row) => sum + (row.titles ? row.titles.length : 0), 0);
+}
+
 async function loadUserAddedLibraries() {
   if (!SUPABASE_ENABLED) return;
   const { data, error } = await sb
@@ -2198,6 +2206,17 @@ async function boot() {
   document.getElementById('loading').classList.add('done');
   setTimeout(() => document.getElementById('loading').remove(), 500);
   showToast(`${libraries.length} libraries on the map`);
+
+  setTimeout(async () => {
+    const bookCount = await getGlobalBookCount();
+    const scannedCount = inventoriedIds.size;
+    const unscannedCount = libraries.length - scannedCount;
+    if (bookCount > 0 && unscannedCount > 0) {
+      showToast(`${bookCount} books found so far — ${unscannedCount} libraries still waiting to be scanned!`);
+    } else if (bookCount > 0) {
+      showToast(`${bookCount} books found so far!`);
+    }
+  }, 3000);
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos => {
