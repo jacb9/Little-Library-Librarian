@@ -1456,7 +1456,14 @@ document.getElementById('locate-btn').addEventListener('click', () => {
     }).addTo(map);
     const nearby = getNearby(userLocation.lat, userLocation.lng, 1);
     if (nearby.length > 0) showToast(`Nearest: ${nearby[0].name} (${Math.round(nearby[0]._dist)}m)`);
-  }, () => showToast('Could not get your location'));
+  }, (err) => {
+    const msgs = {
+      1: 'Location permission denied — check Settings → Privacy → Location Services for this app/browser',
+      2: 'Location unavailable right now — try again in a moment',
+      3: 'Location request timed out',
+    };
+    showToast(msgs[err.code] || 'Could not get your location');
+  });
 });
 
 // ═════════════════════════════════════════════════════════════
