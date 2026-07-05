@@ -18,6 +18,15 @@
   <meta name="twitter:description" content="Find books in little free libraries near you, in Greater Victoria.">
   <meta name="twitter:image" content="https://littlelibrarylibrarian.com/icon/icon-512.png">
 
+  <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-X1TKYV6PJS"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-X1TKYV6PJS');
+  </script>
+
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Little Library Librarian">
@@ -1790,6 +1799,7 @@ document.getElementById('btn-save-box-photo').addEventListener('click', async ()
     const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
     await sb.from('box_photos').insert({ library_id: dbId(activeLibrary), photo_url: urlData.publicUrl });
     showToast('Photo saved — thanks!');
+    if (typeof gtag === 'function') gtag('event', 'box_photo_added');
     document.getElementById('box-photo-modal').classList.remove('open');
     // Small delay so modal close animation completes before refreshing panel
     // — prevents touch events bleeding through to the map and closing the panel
@@ -2007,6 +2017,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 window.addEventListener('appinstalled', () => {
   localStorage.setItem('lll_installed', '1');
   hideEngagementBanner();
+  if (typeof gtag === 'function') gtag('event', 'app_installed');
 });
 
 function showEngagementBanner({ text, actionLabel, onAction }) {
@@ -2031,6 +2042,7 @@ function hideEngagementBanner() {
 function incrementShareCount() {
   const n = parseInt(localStorage.getItem('lll_share_count') || '0', 10) + 1;
   localStorage.setItem('lll_share_count', String(n));
+  if (typeof gtag === 'function') gtag('event', 'share_completed', { share_count: n });
 }
 
 function doShare() {
@@ -2068,6 +2080,7 @@ function recordScanAndGetCount() {
   if (isStandalone()) localStorage.setItem('lll_installed', '1');
   const count = (parseInt(localStorage.getItem('lll_scan_count') || '0', 10)) + 1;
   localStorage.setItem('lll_scan_count', String(count));
+  if (typeof gtag === 'function') gtag('event', 'scan_completed', { scan_count: count });
   return count;
 }
 
