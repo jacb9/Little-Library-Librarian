@@ -521,8 +521,20 @@
       transition: transform 0.2s;
       max-height: 92vh;
       overflow-y: auto;
+      overflow-anchor: none; /* stop Chrome's scroll-anchoring from repositioning scroll when content height changes */
+      -webkit-overflow-scrolling: touch; /* iOS momentum scroll — without this, nested scroll in a flex backdrop can get stuck */
+      overscroll-behavior: contain; /* stop scroll from chaining to the backdrop/page behind it */
       position: relative;
     }
+    .modal-sticky-header {
+      position: sticky;
+      top: -20px; /* cancels .modal's own top padding so this sits flush at the very top */
+      margin: -20px -20px 12px;
+      padding: 20px 20px 10px;
+      background: var(--cream);
+      z-index: 5;
+    }
+    .modal-sticky-header h2 { margin-bottom: 0; }
     .modal-backdrop.open .modal { transform: translateY(0); }
     .modal h2 { font-family: var(--font-body); font-size: 1.12rem; color: var(--ink); margin-bottom: 4px; }
     .modal p.sub { font-family: var(--font-ui); font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 16px; line-height: 1.4; }
@@ -895,8 +907,10 @@
 
 <div class="modal-backdrop" id="faq-modal">
   <div class="modal">
-    <button class="modal-close" id="faq-close">✕</button>
-    <h2>How this works</h2>
+    <div class="modal-sticky-header">
+      <button class="modal-close" id="faq-close">✕</button>
+      <h2>How this works</h2>
+    </div>
 
     <div class="faq-legend">
       <div class="faq-legend-row"><span class="faq-dot ghost"></span> Libraries we know exist but haven't been scanned yet — still waiting for their moment</div>
@@ -1805,7 +1819,9 @@ document.getElementById('add-btn').addEventListener('click', () => {
   document.getElementById('add-modal').classList.add('open');
 });
 document.getElementById('faq-btn').addEventListener('click', () => {
-  document.getElementById('faq-modal').classList.add('open');
+  const modal = document.getElementById('faq-modal');
+  modal.classList.add('open');
+  requestAnimationFrame(() => { modal.querySelector('.modal').scrollTop = 0; });
 });
 document.getElementById('faq-close').addEventListener('click', () => {
   document.getElementById('faq-modal').classList.remove('open');
