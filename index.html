@@ -780,7 +780,7 @@
   <div id="panel-scroll">
     <div id="panel-category"></div>
     <div id="panel-name"></div>
-    <div><span id="panel-status"></span></div>
+    <div><span id="panel-status"></span> <a id="panel-directions" href="#" target="_blank" rel="noopener noreferrer" onclick="if(typeof gtag==='function')gtag('event','directions_tapped');" style="font-family:var(--font-ui); font-size:0.82rem; color:var(--green); font-weight:600; text-decoration:none; white-space:nowrap;">🧭 Directions</a></div>
 
     <div class="section-label" style="margin-top:6px">The Library Box</div>
     <div class="box-photo-row" id="box-photo-row"></div>
@@ -1125,6 +1125,9 @@ function openPanel(lib, marker) {
   const hasInv = inventoriedIds.has(lib.id);
   statusEl.textContent = hasInv ? '✓ Inventoried' : '○ Not yet inventoried — be the first to scan it';
   statusEl.className = hasInv ? 'has-inventory' : 'empty';
+
+  document.getElementById('panel-directions').href =
+    `https://www.google.com/maps/dir/?api=1&destination=${lib.lat},${lib.lng}`;
 
   // Box photo row — seed photo from CSV if present
   const boxRow = document.getElementById('box-photo-row');
