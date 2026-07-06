@@ -681,6 +681,17 @@
     #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
     #stats-grid { display: flex; gap: 12px; }
+
+    .badge-item { width: 76px; text-align: center; }
+    .badge-item img { width: 76px; height: 76px; display: block; }
+    .badge-item .badge-caption { font-family: var(--font-ui); font-size: 0.7rem; color: var(--ink-mid); margin-top: 4px; line-height: 1.2; }
+    .badge-item.locked { position: relative; }
+    .badge-item.locked img { filter: grayscale(100%) opacity(0.35); }
+    .badge-item.locked .badge-lock {
+      position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+      font-size: 1.4rem; opacity: 0.6;
+    }
+    .badge-item.locked .badge-caption { color: var(--ink-faint); }
     .stats-card {
       flex: 1; background: var(--green-pale, #eaf0e6); border-radius: 14px;
       padding: 18px 10px; text-align: center;
@@ -907,10 +918,27 @@
         <div class="stats-label">Times shared</div>
       </div>
     </div>
+
+    <div id="badges-section" style="margin-top:20px;">
+      <p style="font-family:var(--font-ui); font-size:0.78rem; font-weight:600; letter-spacing:0.02em; color:var(--ink-faint); text-transform:uppercase; margin-bottom:8px;">Badges</p>
+      <div id="badges-grid" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
+    </div>
+
     <p style="font-family:var(--font-ui); font-size:0.8rem; color:var(--ink-mid); margin-top:14px; margin-bottom:4px;">
       More scanners means more books you can find. Bring one in?
     </p>
     <button id="stats-share-btn" style="margin-top:4px; width:100%; background:var(--green); color:white; font-weight:600; padding:11px; border-radius:10px;">Share the app</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="badge-award-modal">
+  <div class="modal" style="text-align:center; padding-top:36px; padding-bottom:36px;">
+    <button class="modal-close" id="badge-award-close">✕</button>
+    <img id="badge-award-img" src="" alt="" style="width:140px; height:140px; margin-bottom:14px;">
+    <h2 style="margin-bottom:4px;">Badge earned!</h2>
+    <p id="badge-award-label" style="font-family:var(--font-body); font-size:1.05rem; color:var(--green); font-weight:600; margin-bottom:10px;"></p>
+    <p style="font-family:var(--font-ui); font-size:0.85rem; color:var(--ink-mid);">Check your stats page any time to see all the badges you've earned.</p>
+    <button id="badge-award-ok" style="margin-top:18px; width:100%; background:var(--green); color:white; font-weight:600; padding:11px; border-radius:10px;">Nice!</button>
   </div>
 </div>
 
@@ -1558,14 +1586,69 @@ async function runExtraction(file) {
   document.getElementById('extract-loading').classList.add('show');
   document.getElementById('extract-review').classList.remove('show');
 
-  // Cycle through messages so slow connections don't feel broken
-  const loadingMessages = [
+  // A big pool of jokes so most users won't see the same one twice across many scans.
+  // Three are randomly drawn per scan, then two fixed pacing lines always close it out —
+  // those two aren't jokes, they're signaling "this is taking a while" / "almost done"
+  // and need to reliably show up late in a slow scan regardless of which jokes played first.
+  const JOKE_POOL = [
     'Squinting at spines…',
     'Sounding out the titles…',
     'Judging a few books by their covers…',
+    'Adjusting my tiny reading glasses…',
+    'Debating font choices with the shelf…',
+    'Politely ignoring the water stains…',
+    'Trying not to judge that cover…',
+    'Practicing my book club voice…',
+    "Double-checking that's not a VHS tape…",
+    "Skimming like I'm cramming for a quiz…",
+    "Pretending I've read all of these…",
+    'Alphabetizing in my head, just because…',
+    'Side-eyeing the one book facing backwards…',
+    'Doing my best librarian impression…',
+    'Cross-referencing my imaginary card catalog…',
+    'Reading past a suspicious coffee stain…',
+    'Wondering who returns library books late…',
+    'Taking notes like a nosy neighbour…',
+    'Trying to look busy…',
+    'Getting ready to gossip about what I found…',
+    'Squinting at handwriting on a used-book sticker…',
+    'Trying to read backwards through a bookend…',
+    "Double-checking I'm not misreading a grocery list…",
+    'Trying to guess the genre from the spine alone…',
+    "Silently rating everyone's organizational system…",
+    'Reading three titles at once, badly…',
+    'Cataloguing like my reputation depends on it…',
+    'Reading the room, or at least the shelf…',
+    'Trying to resist starting a book right now…',
+    "Checking twice before I file this under 'classic'…",
+    'Reading spines like they owe me money…',
+    "Ninety percent sure that's a cookbook…",
+    'Not crying at that one dedication page…',
+    'Bracing for a plot twist in the fine print…',
+    'One spine away from an existential crisis…',
+    'Absolutely not snooping, just professionally curious…',
+    'Giving this shelf a solid 8 out of 10…',
+    'Making executive decisions about what counts as "classic"…',
+    'Ninety percent librarian, ten percent nosy…',
+    'About to have strong opinions about font choices…',
+    'Ten seconds from an unsolicited book review…',
+    'Assuming the worst about that self-help section…',
+    'Deciding this shelf has main character energy…',
+    'Definitely not eating a page right now…',
+    'Side-eyeing that suspiciously thick romance novel…',
+    'Ranking these spines by drama level…',
+    'Ignoring the one book held together entirely by tape…',
+    'Not stealing a bookmark idea, definitely not…',
+    'Assuming everyone here has excellent taste…',
+    "Rating this shelf's plot-twist potential…",
+  ];
+  const FIXED_TAIL = [
     'Still reading — some spines are tricky…',
     'Nearly done cataloguing…',
   ];
+  const shuffled = [...JOKE_POOL].sort(() => Math.random() - 0.5);
+  const loadingMessages = [...shuffled.slice(0, 3), ...FIXED_TAIL];
+
   let msgIdx = 0;
   const msgEl = document.getElementById('extract-loading-msg');
   if (msgEl) msgEl.textContent = loadingMessages[0];
@@ -1738,11 +1821,15 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
 
     showToast('Inventory saved — thank you!');
     const savedLibrary = activeLibrary; // capture now — activeLibrary may change before the delayed follow-up fires
-    const scanCount = recordScanAndGetCount(); // increments synchronously so the tally is accurate
+    const { scanCount, bookCount, newBadges } = recordScanAndGetCount(titles.length);
     setTimeout(() => {
       showToast(`That's ${scanCount} ${scanCount === 1 ? 'library' : 'libraries'} you've scanned!`);
     }, 1500);
-    setTimeout(() => runPostScanFollowUp(savedLibrary, scanCount), 3200);
+    if (newBadges.length > 0) {
+      setTimeout(() => announceBadge(newBadges[0]), 3200);
+    } else {
+      setTimeout(() => runPostScanFollowUp(savedLibrary, scanCount), 3200);
+    }
     // Small delay before closing so touch events don't bleed to the map
     setTimeout(() => document.getElementById('scan-modal').classList.remove('open'), 100);
 
@@ -1975,7 +2062,7 @@ document.getElementById('btn-flag').addEventListener('click', () => {
   if (!activeLibrary) return;
   showToast('Problem reported — thanks for flagging this');
 });
-['scan-modal', 'box-photo-modal', 'add-modal', 'faq-modal', 'stats-modal'].forEach(id => {
+['scan-modal', 'box-photo-modal', 'add-modal', 'faq-modal', 'stats-modal', 'badge-award-modal'].forEach(id => {
   const el = document.getElementById(id);
   // Stop ALL clicks inside the modal from reaching the map underneath
   el.addEventListener('click', e => {
@@ -2047,9 +2134,15 @@ function hideEngagementBanner() {
 }
 
 function incrementShareCount() {
-  const n = parseInt(localStorage.getItem('lll_share_count') || '0', 10) + 1;
+  const oldCount = parseInt(localStorage.getItem('lll_share_count') || '0', 10);
+  const n = oldCount + 1;
   localStorage.setItem('lll_share_count', String(n));
   if (typeof gtag === 'function') gtag('event', 'share_completed', { share_count: n });
+  const newBadges = crossedBadges('shares', oldCount, n);
+  newBadges.forEach(b => {
+    if (typeof gtag === 'function') gtag('event', 'badge_earned', { badge: b.label });
+  });
+  if (newBadges.length > 0) setTimeout(() => announceBadge(newBadges[0]), 1200);
 }
 
 function doShare() {
@@ -2083,12 +2176,54 @@ function promptInstall() {
 }
 
 // Called once per successful inventory save
-function recordScanAndGetCount() {
+const BADGES = {
+  libraries: [
+    { threshold: 5, file: 'icon/5-libraries.png', label: '5 Libraries Scanned' },
+    { threshold: 10, file: 'icon/10-libraries.png', label: '10 Libraries Scanned' },
+    { threshold: 25, file: 'icon/25-libraries.png', label: '25 Libraries Scanned' },
+    { threshold: 50, file: 'icon/50-libraries.png', label: '50 Libraries Scanned' },
+  ],
+  books: [
+    { threshold: 100, file: 'icon/100-books.png', label: '100 Books Catalogued' },
+    { threshold: 250, file: 'icon/250-books.png', label: '250 Books Catalogued' },
+    { threshold: 500, file: 'icon/500-books.png', label: '500 Books Catalogued' },
+    { threshold: 1000, file: 'icon/1000-books.png', label: '1,000 Books Catalogued' },
+  ],
+  shares: [
+    { threshold: 1, file: 'icon/1-share.png', label: 'First Share' },
+    { threshold: 5, file: 'icon/5-share.png', label: '5 Shares' },
+    { threshold: 10, file: 'icon/10-share.png', label: '10 Shares' },
+    { threshold: 25, file: 'icon/25-share.png', label: '25 Shares' },
+  ],
+};
+
+// Returns badges whose threshold sits strictly between the old and new count —
+// i.e. crossed for the first time by this exact scan, not already earned before it.
+function crossedBadges(track, oldCount, newCount) {
+  return BADGES[track].filter(b => oldCount < b.threshold && newCount >= b.threshold);
+}
+
+function recordScanAndGetCount(bookCountThisScan) {
   if (isStandalone()) localStorage.setItem('lll_installed', '1');
-  const count = (parseInt(localStorage.getItem('lll_scan_count') || '0', 10)) + 1;
-  localStorage.setItem('lll_scan_count', String(count));
-  if (typeof gtag === 'function') gtag('event', 'scan_completed', { scan_count: count });
-  return count;
+
+  const oldScanCount = parseInt(localStorage.getItem('lll_scan_count') || '0', 10);
+  const oldBookCount = parseInt(localStorage.getItem('lll_book_count') || '0', 10);
+  const scanCount = oldScanCount + 1;
+  const bookCount = oldBookCount + (bookCountThisScan || 0);
+  localStorage.setItem('lll_scan_count', String(scanCount));
+  localStorage.setItem('lll_book_count', String(bookCount));
+
+  if (typeof gtag === 'function') gtag('event', 'scan_completed', { scan_count: scanCount });
+
+  const newBadges = [
+    ...crossedBadges('libraries', oldScanCount, scanCount),
+    ...crossedBadges('books', oldBookCount, bookCount),
+  ];
+  newBadges.forEach(b => {
+    if (typeof gtag === 'function') gtag('event', 'badge_earned', { badge: b.label });
+  });
+
+  return { scanCount, bookCount, newBadges };
 }
 
 function showPostScanNudge(count) {
@@ -2154,6 +2289,7 @@ async function openStatsModal() {
   if (!SUPABASE_ENABLED) {
     document.getElementById('stats-scans').textContent = '0';
     document.getElementById('stats-books').textContent = '0';
+    renderBadges(0, 0);
     return;
   }
 
@@ -2164,6 +2300,7 @@ async function openStatsModal() {
   if (error || !data) {
     document.getElementById('stats-scans').textContent = '–';
     document.getElementById('stats-books').textContent = '–';
+    renderBadges(0, 0);
     return;
   }
 
@@ -2171,10 +2308,47 @@ async function openStatsModal() {
   const bookCount = data.reduce((sum, row) => sum + (row.titles ? row.titles.length : 0), 0);
   document.getElementById('stats-scans').textContent = scanCount;
   document.getElementById('stats-books').textContent = bookCount;
+  renderBadges(scanCount, bookCount);
 }
 document.getElementById('stats-btn').addEventListener('click', openStatsModal);
 document.getElementById('stats-close').addEventListener('click', () => {
   document.getElementById('stats-modal').classList.remove('open');
+});
+
+// Shows every earned badge in colour, plus just the next unearned badge in each track
+// (locked/greyed, with a progress count) — further-out badges stay hidden until their turn.
+function renderBadges(scanCount, bookCount) {
+  const grid = document.getElementById('badges-grid');
+  if (!grid) return;
+  const shareCount = parseInt(localStorage.getItem('lll_share_count') || '0', 10);
+  let html = '';
+  [['libraries', scanCount], ['books', bookCount], ['shares', shareCount]].forEach(([track, count]) => {
+    const list = BADGES[track];
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      const earned = count >= b.threshold;
+      if (earned) {
+        html += `<div class="badge-item"><img src="${b.file}" alt="${b.label}"><div class="badge-caption">${b.label}</div></div>`;
+      } else {
+        html += `<div class="badge-item locked"><img src="${b.file}" alt="${b.label}"><span class="badge-lock">🔒</span><div class="badge-caption">${count} of ${b.threshold}</div></div>`;
+        break; // stop after the first locked badge — don't show ones further out yet
+      }
+    }
+  });
+  grid.innerHTML = html;
+}
+
+function announceBadge(badge) {
+  document.getElementById('badge-award-img').src = badge.file;
+  document.getElementById('badge-award-img').alt = badge.label;
+  document.getElementById('badge-award-label').textContent = badge.label;
+  document.getElementById('badge-award-modal').classList.add('open');
+}
+document.getElementById('badge-award-close').addEventListener('click', () => {
+  document.getElementById('badge-award-modal').classList.remove('open');
+});
+document.getElementById('badge-award-ok').addEventListener('click', () => {
+  document.getElementById('badge-award-modal').classList.remove('open');
 });
 document.getElementById('stats-share-btn').addEventListener('click', doShare);
 
