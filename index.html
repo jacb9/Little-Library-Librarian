@@ -994,11 +994,6 @@
       <div class="faq-item-label">Spotted something wrong with a library?</div>
       <div class="faq-item-body">Use <span class="faq-icon-inline">🚩</span> on its page.</div>
     </div>
-
-    <div class="faq-item">
-      <div class="faq-item-label">Where did the library locations come from?</div>
-      <div class="faq-item-body">This app started with map location data from the <a href="https://victoriaplacemaking.ca/little-free-libraries/" target="_blank" rel="noopener noreferrer">Greater Victoria Placemaking Network</a>, which has spent years mapping little free libraries across the region. Thanks to them for the head start. From here, inventories and library photos are added by app users like you.</div>
-    </div>
   </div>
 </div>
 
@@ -1010,17 +1005,48 @@
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">A little free library is only useful if you know what's on the shelf before you walk over. Most of the time you don't — the contents change constantly and nobody's keeping track. Little Library Librarian exists to fix that: a map of every little library across Greater Victoria, with real inventories built from photos neighbours take of the actual shelves.</div>
+      <div class="faq-item-body">Somewhere on a neighbourhood walk, the Little Library Librarian (LLL!) was born.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-label">How it works</div>
-      <div class="faq-item-body">There's no staff and no central catalogue — just people like you scanning a shelf when they pass by. AI reads the spines from the photo, you fix anything it got wrong, and that inventory becomes searchable for everyone else. The map only gets better the more people use it.</div>
+      <div class="faq-item-body">We're a couple who has always loved little free libraries. We walk to them daily — usually with our dogs — sometimes hunting for the next book in a series we started from a box three streets over, sometimes just curious what the neighbourhood left behind this week.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-label">Who's behind it</div>
-      <div class="faq-item-body">Built by a couple of neighbours here in Victoria who got tired of driving to three libraries hoping one had the book they wanted. It started with location data from the <a href="https://victoriaplacemaking.ca/little-free-libraries/" target="_blank" rel="noopener noreferrer">Greater Victoria Placemaking Network</a> — everything since then, every inventory and box photo, comes from the community.</div>
+      <div class="faq-item-body">What we found is that every little library has its own personality. Some are tidy and curated, full of literary fiction and careful handwritten notes. Others are packed with romance novels, spines cracked from being loved by half the street. Some lean toward travel — memoirs from places you've always meant to go, guidebooks for trips someone already took. Others are gloriously chaotic: beach reads, children's books, the occasional beautiful surprise. We started wandering into neighbourhoods we didn't know, just to see what their boxes were like. Just to walk somewhere new with a reason.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-body">Then one day we were looking for a specific book. Not a new release, not anything obscure — just a book we wanted. The bookstore didn't have it. The library didn't have it either. So we started checking little free libraries, box by box, neighbourhood by neighbourhood, coming home empty-handed more often than not.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-body">Somewhere on one of those walks, we thought: wouldn't it be great if you could see what was inside before you left the house?</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-label">The honest truth</div>
+      <div class="faq-item-body">We're two people with no experience building apps who had an idea on a dog walk. We don't know if we can pull this off. But we built a first version, it works, and you're looking at it — so that's something. Now we're wondering if a small community of early believers can help us find out.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-body">We picture a Greater Victoria where enough people are participating that we can actually catalogue what's on these shelves — crowdsourced, real, and somewhat reliable. (The AI scans aren't perfect, but they're pretty good, and getting better.) Where you can follow a title across the city, or set out to find a little library stocked with whatever genre you're in the mood for. Think of it like one of those apps that tells you where to find cheap gas nearby — except the reward here is discovery. A new walk. A new neighbourhood. A new genre. Or finally finding that book you've been hunting for.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-label">Where things stand</div>
+      <div class="faq-item-body">Right now LLL is small. If you're reading this, you're a friend or a friend of a friend — and we mean that literally. We need about 500 libraries logged before we take this to the press. That's the number that makes it real to people who didn't build it.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-body">So if you're in: log a library today. Scan a shelf. Add a box you walk past every day that nobody's mapped yet. Add the app to your homescreen. Then share it with three people who love to walk and read — you'll find a share button waiting on your stats page.</div>
+    </div>
+
+    <button class="btn-primary" id="about-find-read-btn" style="width:100%; margin-top:6px; margin-bottom:18px;">📖 Find your next read</button>
+
+    <div class="faq-item">
+      <div class="faq-item-label">Where the map came from</div>
+      <div class="faq-item-body">This started with location data from the <a href="https://victoriaplacemaking.ca/little-free-libraries/" target="_blank" rel="noopener noreferrer">Greater Victoria Placemaking Network</a>, who've spent years mapping little libraries across the region — our thanks to them for the head start. Everything since then, every inventory and box photo, comes from people like you.</div>
     </div>
 
     <div class="faq-item">
@@ -1030,7 +1056,7 @@
 
     <div class="faq-item">
       <div class="faq-item-label">Get in touch</div>
-      <div class="faq-item-body">Found a bug, have an idea, or just want to say hi? Reach out at <a href="mailto:hello@littlelibrarylibrarian.com">hello@littlelibrarylibrarian.com</a>.</div>
+      <div class="faq-item-body">Found a bug, have an idea, or just want to say hi? Reach out at <a href="mailto:littlelibrarylibrarian@gmail.com">littlelibrarylibrarian@gmail.com</a>.</div>
     </div>
   </div>
 </div>
@@ -2025,6 +2051,9 @@ document.getElementById('about-btn').addEventListener('click', () => {
   requestAnimationFrame(() => { modal.querySelector('.modal').scrollTop = 0; });
 });
 document.getElementById('about-close').addEventListener('click', () => {
+  document.getElementById('about-modal').classList.remove('open');
+});
+document.getElementById('about-find-read-btn').addEventListener('click', () => {
   document.getElementById('about-modal').classList.remove('open');
 });
 document.getElementById('add-close').addEventListener('click', () => {
