@@ -1038,41 +1038,39 @@
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">Somewhere on a neighbourhood walk, Little Library Librarian was born.</div>
+      <div class="faq-item-body">We're Jill and Joel, a writer and a professor, who have always loved little free libraries. We walk to them daily — usually with our dogs — sometimes hunting for the next book in a series we started from a box three streets over, sometimes just curious what the neighbourhood left behind this week.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">We're a couple who has always loved little free libraries. We walk to them daily — usually with our dogs — sometimes hunting for the next book in a series we started from a box three streets over, sometimes just curious what the neighbourhood left behind this week.</div>
+      <div class="faq-item-body">Then one day we were looking for a specific book. The bookstore didn't have it. The library didn't have it either. So we started checking little free libraries around us, each time coming home empty-handed.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">What we found is that every little library has its own personality. Some are tidy and curated, full of literary fiction and careful handwritten notes. Others are packed with romance novels, spines cracked from being loved by half the street. Some lean toward travel — memoirs from places you've always meant to go, guidebooks for trips someone already took. Others are gloriously chaotic: beach reads, children's books, the occasional beautiful surprise. We started wandering into neighbourhoods we didn't know, just to see what their boxes were like. Just to walk somewhere new with a reason.</div>
+      <div class="faq-item-body">So Jill wondered out loud: what if you could search little libraries by title or genre — like checking gas prices? Joel loved the idea.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">Then one day we were looking for a specific book. Not a new release, not anything obscure — just a book we wanted. The bookstore didn't have it. The library didn't have it either. So we started checking little free libraries, box by box, neighbourhood by neighbourhood, coming home empty-handed more often than not.</div>
+      <div class="faq-item-body">And now you're looking at it.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">Somewhere on one of those walks, we thought: wouldn't it be great if you could see what was inside before you left the house?</div>
+      <div class="faq-item-body">The more libraries people log, the more useful it gets for everyone — including you. Every scan you add makes someone else's dog walk better, and theirs makes yours.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-label">What we're hoping for</div>
-      <div class="faq-item-body">We're two people with no experience building apps who had an idea on a dog walk. We don't know if we can pull this off. But we built a first version, it works, and you're looking at it — so that's something. Now we're wondering if a small community of early believers can help us find out.</div>
+      <div class="faq-item-body">If you're reading this, you're a friend or a friend of a friend. We need about 500 libraries logged to get this moving on its own.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">We picture a Greater Victoria where enough people are participating that we can actually catalogue what's on these shelves — crowdsourced, real, and somewhat reliable. (The AI scans aren't perfect, but they're pretty good, and getting better.) Where you can follow a title across the city, or set out to find a little library stocked with whatever genre you're in the mood for. Think of it like one of those apps that tells you where to find cheap gas nearby — except the reward here is discovery. A new walk. A new neighbourhood. A new genre. Or finally finding that book you've been hunting for.</div>
+      <div class="faq-item-body">So if you're in: log a library today. Save it to your home screen. Scan a shelf. Then share it with three people who love to walk and read.</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-label">Where things stand</div>
-      <div class="faq-item-body">Right now Little Library Librarian is small. If you're reading this, you're a friend or a friend of a friend — and we mean that literally. We need about 500 libraries logged before we take this to the press. That's the number that makes it real to people who didn't build it.</div>
+      <div class="faq-item-body">Thanks for being here (before it gets cool!).</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-item-body">So if you're in: log a library today. Scan a shelf. Add a box you walk past every day that nobody's mapped yet. Add the app to your homescreen. Then share it with three people who love to walk and read — you'll find a share button waiting on your stats page.</div>
+      <div class="faq-item-body">We appreciate your help cataloguing our community's book shelves!</div>
     </div>
 
     <p style="font-family:var(--font-body); font-style:italic; text-align:right; color:var(--ink-mid); margin-top:2px; margin-bottom:14px;">— Jill and Joel</p>
@@ -1808,9 +1806,14 @@ async function runExtraction(file) {
   document.getElementById('extract-review').classList.remove('show');
 
   // A big pool of jokes so most users won't see the same one twice across many scans.
-  // Three are randomly drawn per scan, then two fixed pacing lines always close it out —
-  // those two aren't jokes, they're signaling "this is taking a while" / "almost done"
-  // and need to reliably show up late in a slow scan regardless of which jokes played first.
+  // Five are randomly drawn per scan, arranged around two fixed pacing lines rather than
+  // tacked on at the end — "still reading" surfaces mid-sequence, since unexplained waits
+  // feel longer than explained ones and most scans should reach at least one reassurance
+  // before finishing. "Nearly done" stays right before the end, since it's a claim about
+  // imminent completion — moving it earlier risks promising "almost done" and then making
+  // someone wait another 15+ seconds anyway, which reads worse than saying nothing.
+  // If the scan finishes before all 7 messages have cycled through (35s), clearInterval
+  // below cuts the sequence short and shows the real result immediately.
   const JOKE_POOL = [
     'Squinting at spines…',
     'Sounding out the titles…',
@@ -1862,13 +1865,33 @@ async function runExtraction(file) {
     'Not stealing a bookmark idea, definitely not…',
     'Assuming everyone here has excellent taste…',
     "Rating this shelf's plot-twist potential…",
+    'Dewey Decimal was particular. We respect that.',
+    'Reading spines. Mild squinting. Bear with us.',
+    "Books facing wrong way? We don't trust them.",
+    'Almost done. Like that book on your nightstand.',
+    'Da Vinci Code spotted? It cannot be stopped.',
+    'One royal family book per library. Always.',
+    'Know a walker who reads? Share the app.',
+    "500 libraries logged = momentum. You're helping!",
+    'Every scan makes this work better. Thank you.',
+    'Check the bottom shelf while we work.',
+    'A math textbook in there? We love that for you.',
+    "Victoria: Canada's little free library capital.",
+    'More little libraries than Tim Hortons.',
+    "First little library: a tribute to someone's mum.",
+    'Someone will walk here because you scanned this.',
   ];
   const FIXED_TAIL = [
     'Still reading — some spines are tricky…',
     'Nearly done cataloguing…',
   ];
   const shuffled = [...JOKE_POOL].sort(() => Math.random() - 0.5);
-  const loadingMessages = [...shuffled.slice(0, 3), ...FIXED_TAIL];
+  const loadingMessages = [
+    ...shuffled.slice(0, 3),
+    FIXED_TAIL[0],
+    ...shuffled.slice(3, 5),
+    FIXED_TAIL[1],
+  ];
 
   let msgIdx = 0;
   const msgEl = document.getElementById('extract-loading-msg');
@@ -1876,7 +1899,7 @@ async function runExtraction(file) {
   const msgInterval = setInterval(() => {
     msgIdx = Math.min(msgIdx + 1, loadingMessages.length - 1);
     if (msgEl) msgEl.textContent = loadingMessages[msgIdx];
-  }, 3000);
+  }, 5000);
 
   if (!EXTRACTION_ENABLED) {
     // Demo fallback so the review UI can be tested without a live endpoint
