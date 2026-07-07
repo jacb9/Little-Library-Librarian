@@ -317,7 +317,8 @@
     /* ── Search results overlay ──────────────────────────────── */
     #search-results {
       position: fixed;
-      top: 104px; left: 0; right: 0; bottom: 0;
+      top: 104px; /* fallback for first paint — corrected by positionSearchResults() in JS */
+      left: 0; right: 0; bottom: 0;
       background: var(--cream);
       z-index: 600;
       overflow-y: auto;
@@ -1136,6 +1137,7 @@ let activeLibrary = null;
 let activeMarker = null;
 let userLocation = null;
 let pendingScanPhoto = null;
+let secondPhotoAppendContext = null; // set while capturing a 2nd photo for an already-saved row
 let pendingBoxPhoto = null;
 let extractedTitles = [];          // current editable list in scan modal
 let newLibraryLatLng = null;
@@ -1343,11 +1345,27 @@ document.getElementById('search-clear').addEventListener('click', () => {
   closeSearchResults();
 });
 
+// The search-results overlay is position:fixed, so it doesn't sit "below" the
+// search bar the way normal document flow would — it has to be told exactly
+// where to start via a top offset in px. That offset changes depending on
+// whether the search bar is open, whether it's showing the input or the genre
+// pills, and how many lines the pills wrap to — so it's computed from the real
+// rendered layout rather than hardcoded, and recalculated on anything that
+// could change that layout.
+function positionSearchResults() {
+  const bar = document.getElementById('search-bar');
+  const header = document.getElementById('header');
+  const anchor = bar.classList.contains('open') ? bar : header;
+  document.getElementById('search-results').style.top = anchor.getBoundingClientRect().bottom + 'px';
+}
+window.addEventListener('resize', positionSearchResults);
+
 document.getElementById('search-toggle').addEventListener('click', () => {
   const bar = document.getElementById('search-bar');
   bar.classList.toggle('open');
   if (bar.classList.contains('open')) document.getElementById('search-input').focus();
   else closeSearchResults();
+  requestAnimationFrame(positionSearchResults);
 });
 
 // Genres shown as pills — keep this list in sync with GENRES in extract-titles/index.ts.
@@ -1376,6 +1394,7 @@ function setSearchMode(mode) {
   document.getElementById('search-input-wrap').style.display = mode === 'text' ? 'flex' : 'none';
   genrePillRow.classList.toggle('open', mode === 'genre');
   closeSearchResults();
+  requestAnimationFrame(positionSearchResults);
   if (mode === 'text') document.getElementById('search-input').focus();
 }
 document.getElementById('search-mode-text').addEventListener('click', () => setSearchMode('text'));
@@ -1417,6 +1436,7 @@ async function runSearch(query) {
   const listDiv = document.getElementById('search-results-list');
   const metaDiv = document.getElementById('search-meta');
   resultsDiv.classList.add('open');
+  requestAnimationFrame(positionSearchResults);
 
   if (!SUPABASE_ENABLED) {
     metaDiv.textContent = '';
@@ -1539,6 +1559,7 @@ async function runGenreSearch(genre) {
   const listDiv = document.getElementById('search-results-list');
   const metaDiv = document.getElementById('search-meta');
   resultsDiv.classList.add('open');
+  requestAnimationFrame(positionSearchResults);
 
   if (!SUPABASE_ENABLED) {
     metaDiv.textContent = '';
@@ -1621,11 +1642,23 @@ async function runGenreSearch(genre) {
 // Simple fuzzy matching: normalised substring + Levenshtein-ish tolerance
 function fuzzyMatchTitles(query, inventoryRows) {
   const q = normalize(query);
+  // Mirror image of the title-side guard below: if the query itself has no Latin
+  // content (e.g. someone pastes in non-Latin text), it also normalizes to '' —
+  // and "anything".includes('') is true in JS, which would match every title in
+  // the database. No valid Latin query, no results.
+  if (!q) return [];
   const titleMap = new Map(); // normalized title -> { title, libraryIds:Set, quality }
 
   inventoryRows.forEach(row => {
     (row.titles || []).forEach(title => {
       const nt = normalize(title);
+      // Titles with no Latin-script content (Chinese, Gurmukhi, etc.) normalize to
+      // an empty string. Without this guard, "".includes(q) is false but
+      // q.includes("") is ALWAYS true in JS — meaning every non-Latin title would
+      // silently match every single search query. Search is Latin-script only for
+      // now; non-Latin titles still show up in the library's own inventory list,
+      // they just aren't matchable here.
+      if (!nt) return;
       let quality = null;
       if (nt === q) quality = 'Exact match';
       else if (nt.includes(q) || q.includes(nt)) quality = 'Close match';
@@ -1654,8 +1687,18 @@ function fuzzyMatchTitles(query, inventoryRows) {
     });
 }
 
+// Folds accented Latin letters to their base form first (café → cafe, résumé →
+// resume, Müller → Muller) so French/Spanish/Italian/German titles stay fully
+// searchable, THEN strips anything left that isn't a-z0-9/space. A title in a
+// non-Latin script (Chinese, Gurmukhi, Cyrillic, etc.) has nothing left after
+// that and normalizes to '' — see the guard in fuzzyMatchTitles above.
 function normalize(s) {
-  return s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  return s
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function levenshteinClose(a, b, maxDist = 2) {
@@ -1717,6 +1760,7 @@ document.getElementById('locate-btn').addEventListener('click', () => {
 // Scan shelf flow
 // ═════════════════════════════════════════════════════════════
 document.getElementById('btn-scan-shelf').addEventListener('click', () => {
+  secondPhotoAppendContext = null; // this is a normal fresh scan, not completing a 2nd photo
   pendingScanPhoto = null;
   extractedTitles = [];
   document.getElementById('scan-photo-input').value = '';
@@ -1728,6 +1772,13 @@ document.getElementById('btn-scan-shelf').addEventListener('click', () => {
 });
 document.getElementById('scan-close').addEventListener('click', () => {
   document.getElementById('scan-modal').classList.remove('open');
+  // Said yes to a 2nd photo, then bailed before finishing it — don't just drop the
+  // badge/box-photo step that was waiting on this, continue on without the append.
+  if (secondPhotoAppendContext) {
+    const { proceed } = secondPhotoAppendContext;
+    secondPhotoAppendContext = null;
+    proceed();
+  }
 });
 
 function buildLocationConfirm(containerId) {
@@ -1805,15 +1856,7 @@ async function runExtraction(file) {
   document.getElementById('extract-loading').classList.add('show');
   document.getElementById('extract-review').classList.remove('show');
 
-  // A big pool of jokes so most users won't see the same one twice across many scans.
-  // Five are randomly drawn per scan, arranged around two fixed pacing lines rather than
-  // tacked on at the end — "still reading" surfaces mid-sequence, since unexplained waits
-  // feel longer than explained ones and most scans should reach at least one reassurance
-  // before finishing. "Nearly done" stays right before the end, since it's a claim about
-  // imminent completion — moving it earlier risks promising "almost done" and then making
-  // someone wait another 15+ seconds anyway, which reads worse than saying nothing.
-  // If the scan finishes before all 7 messages have cycled through (35s), clearInterval
-  // below cuts the sequence short and shows the real result immediately.
+  // A big pool of jokes so most users won't see the same one twice in a normal scan.
   const JOKE_POOL = [
     'Squinting at spines…',
     'Sounding out the titles…',
@@ -1881,25 +1924,52 @@ async function runExtraction(file) {
     "First little library: a tribute to someone's mum.",
     'Someone will walk here because you scanned this.',
   ];
-  const FIXED_TAIL = [
+
+  // Pacing lines — the only messages here making an honest claim about ongoing
+  // progress, not a joke. Deliberately no "almost done" / "nearly there" language:
+  // since this cycle now repeats indefinitely for as long as a scan actually takes,
+  // a message like that could fire early and then get contradicted by another
+  // 30+ seconds of waiting, which erodes trust worse than saying nothing at all.
+  // Everything here stays true no matter how long the wait runs.
+  const PACING_POOL = [
     'Still reading — some spines are tricky…',
-    'Nearly done cataloguing…',
-  ];
-  const shuffled = [...JOKE_POOL].sort(() => Math.random() - 0.5);
-  const loadingMessages = [
-    ...shuffled.slice(0, 3),
-    FIXED_TAIL[0],
-    ...shuffled.slice(3, 5),
-    FIXED_TAIL[1],
+    'This shelf has more going on than usual…',
+    'A few stubborn spines are slowing us down…',
+    'Cross-checking a few tricky reads…',
+    'Still working through it — thanks for waiting…',
+    'Reading is taking a bit longer this time…',
+    'Still on it — some titles are hard to make out…',
+    'Working through every shelf, every spine…',
+    'Good libraries take a minute — still going…',
+    'Still reading — bear with us…',
   ];
 
-  let msgIdx = 0;
+  // Cycles 3 random jokes, then 1 pacing line, on repeat — for as long as the scan
+  // actually takes, rather than stopping after a fixed sequence. A single moving
+  // avatar can start to feel like nothing's happening on a slow scan (especially
+  // now that two-photo scans exist); a steady drip of "yes, still working" messages
+  // is a clearer signal than animation alone. Both pools draw from a shuffled queue
+  // that only reshuffles once exhausted, so nothing repeats until everything else
+  // in that pool has been shown first.
+  let jokeQueue = [];
+  function nextJoke() {
+    if (jokeQueue.length === 0) jokeQueue = [...JOKE_POOL].sort(() => Math.random() - 0.5);
+    return jokeQueue.shift();
+  }
+  let pacingQueue = [];
+  function nextPacing() {
+    if (pacingQueue.length === 0) pacingQueue = [...PACING_POOL].sort(() => Math.random() - 0.5);
+    return pacingQueue.shift();
+  }
+
+  let msgSlot = 0; // slots 0,1,2 within each block of 4 are jokes; slot 3 is pacing
   const msgEl = document.getElementById('extract-loading-msg');
-  if (msgEl) msgEl.textContent = loadingMessages[0];
-  const msgInterval = setInterval(() => {
-    msgIdx = Math.min(msgIdx + 1, loadingMessages.length - 1);
-    if (msgEl) msgEl.textContent = loadingMessages[msgIdx];
-  }, 5000);
+  function showNextMessage() {
+    if (msgEl) msgEl.textContent = (msgSlot % 4 === 3) ? nextPacing() : nextJoke();
+    msgSlot++;
+  }
+  showNextMessage();
+  const msgInterval = setInterval(showNextMessage, 5000);
 
   if (!EXTRACTION_ENABLED) {
     // Demo fallback so the review UI can be tested without a live endpoint
@@ -1932,7 +2002,17 @@ async function runExtraction(file) {
       const data = await res.json();
       const titles = data.titles || [];
       const genres = data.genres || [];
-      extractedTitles = titles.map((t, i) => ({ text: t, edited: false, genre: genres[i] || 'Other' }));
+      const newChips = titles.map((t, i) => ({ text: t, edited: false, genre: genres[i] || 'Other' }));
+      if (secondPhotoAppendContext) {
+        // Show one combined list, not two separate batches — the person reviewing
+        // shouldn't have to think about which photo a book came from.
+        const existingChips = secondPhotoAppendContext.existingTitles.map((t, i) => ({
+          text: t, edited: false, genre: secondPhotoAppendContext.existingGenres[i] || 'Other',
+        }));
+        extractedTitles = [...existingChips, ...newChips];
+      } else {
+        extractedTitles = newChips;
+      }
     }
   } catch (err) {
     console.error('Extraction fetch error:', err);
@@ -1946,9 +2026,13 @@ async function runExtraction(file) {
   const count = extractedTitles.length;
   const avatarEl = document.getElementById('extract-loading-avatar');
   if (msgEl) {
-    msgEl.textContent = count > 0
-      ? `Found ${count} book${count === 1 ? '' : 's'}!`
-      : `Hmm, couldn't make out any titles — you can add them below`;
+    if (count === 0) {
+      msgEl.textContent = `Hmm, couldn't make out any titles — you can add them below`;
+    } else if (secondPhotoAppendContext) {
+      msgEl.textContent = `Combined list ready — ${count} book${count === 1 ? '' : 's'} total`;
+    } else {
+      msgEl.textContent = `Found ${count} book${count === 1 ? '' : 's'}!`;
+    }
   }
   if (avatarEl) {
     avatarEl.classList.add('found');
@@ -2094,6 +2178,48 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
   btn.textContent = 'Saving…';
   btn.disabled = true;
 
+  const titles = [];
+  const genres = [];
+  extractedTitles.forEach(t => {
+    if (!t.text) return;
+    titles.push(t.text);
+    genres.push(t.genre || 'Other');
+  });
+  const editedCount = extractedTitles.filter(t => t.edited).length;
+
+  // Completing a 2nd photo for a library scanned moments ago: update the existing
+  // row (titles/genres already include the merged list from runExtraction above)
+  // rather than inserting a new one. A second row would become "the latest scan"
+  // and search only reads the latest scan per library — so a normal insert here
+  // would silently make the first photo's books invisible to search, not additive.
+  // Keeping the first photo as the row's only photo_url is a deliberate choice —
+  // one visual record per inventory, not two.
+  if (secondPhotoAppendContext) {
+    const { rowId, proceed } = secondPhotoAppendContext;
+    try {
+      const { error: updErr } = await sb.from('inventories').update({
+        titles, genres,
+        ai_edited_count: editedCount,
+        ai_total_count: extractedTitles.length,
+      }).eq('id', rowId);
+      if (updErr) throw updErr;
+
+      showToast('Second picture added — inventory complete!');
+      const invList = document.getElementById('inventory-list');
+      loadInventoryEntries(dbId(activeLibrary), invList);
+    } catch (err) {
+      console.error('Failed to append 2nd photo:', err);
+      showToast('Something went wrong saving the second photo — please try again');
+    } finally {
+      secondPhotoAppendContext = null;
+      btn.textContent = '💾 Save Inventory';
+      btn.disabled = false;
+      setTimeout(() => document.getElementById('scan-modal').classList.remove('open'), 100);
+      setTimeout(proceed, 800);
+    }
+    return;
+  }
+
   try {
     const ext = pendingScanPhoto.name.split('.').pop() || 'jpg';
     const path = `inventory/${dbId(activeLibrary)}/${Date.now()}.${ext}`;
@@ -2101,16 +2227,7 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     if (upErr) throw upErr;
     const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
 
-    const titles = [];
-    const genres = [];
-    extractedTitles.forEach(t => {
-      if (!t.text) return;
-      titles.push(t.text);
-      genres.push(t.genre || 'Other');
-    });
-    const editedCount = extractedTitles.filter(t => t.edited).length;
-
-    const { error: dbErr } = await sb.from('inventories').insert({
+    const { data: insertedRow, error: dbErr } = await sb.from('inventories').insert({
       library_id: dbId(activeLibrary),
       photo_url: urlData.publicUrl,
       titles,
@@ -2118,7 +2235,7 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
       ai_edited_count: editedCount,
       ai_total_count: extractedTitles.length,
       device_id: getDeviceId(),
-    });
+    }).select('id').single();
     if (dbErr) throw dbErr;
 
     inventoriedIds.add(activeLibrary.id);  // use local app id (u_N or numeric) not raw db integer
@@ -2130,11 +2247,16 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     setTimeout(() => {
       showToast(`That's ${scanCount} ${scanCount === 1 ? 'library' : 'libraries'} you've scanned!`);
     }, 1500);
-    if (newBadges.length > 0) {
-      setTimeout(() => announceBadge(newBadges[0]), 3200);
-    } else {
-      setTimeout(() => runPostScanFollowUp(savedLibrary, scanCount), 3200);
-    }
+
+    // Everything that happens after this scan — badge, box-photo reminder — is only
+    // supposed to run once. The 2nd-photo question comes first regardless of whether
+    // a badge is queued; "proceed" is what continues to whichever of those was next.
+    const proceed = () => {
+      if (newBadges.length > 0) announceBadge(newBadges[0]);
+      else runPostScanFollowUp(savedLibrary, scanCount);
+    };
+    setTimeout(() => offerSecondPhoto(savedLibrary, insertedRow.id, titles, genres, proceed), 3200);
+
     // Small delay before closing so touch events don't bleed to the map
     setTimeout(() => document.getElementById('scan-modal').classList.remove('open'), 100);
 
@@ -2430,13 +2552,16 @@ window.addEventListener('appinstalled', () => {
   if (typeof gtag === 'function') gtag('event', 'app_installed');
 });
 
-function showEngagementBanner({ text, actionLabel, onAction }) {
+function showEngagementBanner({ text, actionLabel, onAction, onDismiss }) {
   const banner = document.getElementById('engagement-banner');
   document.getElementById('engagement-banner-text').textContent = text;
   const primaryBtn = document.getElementById('engagement-banner-primary');
   primaryBtn.textContent = actionLabel;
   primaryBtn.onclick = () => { onAction(); hideEngagementBanner(); };
-  document.getElementById('engagement-banner-dismiss').onclick = hideEngagementBanner;
+  document.getElementById('engagement-banner-dismiss').onclick = () => {
+    hideEngagementBanner();
+    if (onDismiss) onDismiss();
+  };
 
   // The library panel's action bar (scan/box-photo/flag) sits at the very bottom of the
   // screen too — if the panel is open, lift the banner above it instead of covering it.
@@ -2570,8 +2695,39 @@ function showPostScanNudge(count) {
   }
 }
 
-// After a save, offer the box photo first if this library doesn't have one yet —
+// Some libraries have two shelves/sections that don't fit in one frame. Offered
+// right after save, before the box-photo reminder — "second" rather than "another"
+// deliberately sets a hard expectation of exactly one more photo, not an open-ended
+// invitation to keep scanning book by book. Whichever way this resolves (Yes and the
+// 2nd photo completes, or No), `proceed` is what continues on to badge/box-photo —
+// it only ever runs once, either right away or after the append finishes.
+function offerSecondPhoto(library, rowId, existingTitles, existingGenres, proceed) {
+  showEngagementBanner({
+    text: 'Need a second picture to complete this inventory?',
+    actionLabel: 'Yes, add it',
+    onAction: () => startSecondPhotoScan(library, rowId, existingTitles, existingGenres, proceed),
+    onDismiss: proceed,
+  });
+}
+
+function startSecondPhotoScan(library, rowId, existingTitles, existingGenres, proceed) {
+  activeLibrary = library;
+  secondPhotoAppendContext = { rowId, existingTitles, existingGenres, proceed };
+  pendingScanPhoto = null;
+  extractedTitles = [];
+  document.getElementById('scan-photo-input').value = '';
+  resetUploadZoneVisual('scan-upload-zone');
+  document.getElementById('extract-loading').classList.remove('show');
+  document.getElementById('extract-review').classList.remove('show');
+  buildLocationConfirm('confirm-cards'); // library's already fixed, so this just shows it pre-selected
+  document.getElementById('scan-modal').classList.add('open');
+}
+
+
 // that's the direct continuation of the scan just completed. Only fall back to the
+// install/share nudge when there's no photo gap to close, so we never stack two asks.
+// Offer the box photo if this library doesn't have one yet — the direct continuation
+// once the 2nd-photo question (above) has resolved either way. Only fall back to the
 // install/share nudge when there's no photo gap to close, so we never stack two asks.
 async function runPostScanFollowUp(library, count) {
   let needsBoxPhoto = false;
