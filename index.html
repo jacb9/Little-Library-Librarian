@@ -255,6 +255,34 @@
     #search-input::placeholder { color: var(--ink-faint); }
     #search-clear { color: var(--ink-faint); font-size: 1.1rem; padding: 4px; display: none; }
 
+    #search-mode-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+    .search-mode-tab {
+      flex: 1;
+      text-align: center;
+      font-family: var(--font-ui);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--green-pale);
+      background: rgba(255,255,255,0.15);
+      border: none;
+      border-radius: 8px;
+      padding: 7px 0;
+    }
+    .search-mode-tab.active { background: white; color: var(--green); }
+    #genre-pill-row { display: none; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    #genre-pill-row.open { display: flex; }
+    .genre-pill {
+      font-family: var(--font-ui);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: white;
+      background: rgba(255,255,255,0.15);
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-radius: 999px;
+      padding: 6px 12px;
+    }
+    .genre-pill.active { background: var(--amber); border-color: var(--amber); }
+
     /* ── Map ───────────────────────────────────────────────────── */
     #map { flex: 1; z-index: 1; }
 
@@ -759,11 +787,16 @@
   </div>
 
   <div id="search-bar">
+    <div id="search-mode-tabs">
+      <button class="search-mode-tab active" id="search-mode-text">Title / Author</button>
+      <button class="search-mode-tab" id="search-mode-genre">Genre</button>
+    </div>
     <div id="search-input-wrap">
       <span style="margin-right:6px">🔍</span>
       <input id="search-input" type="text" placeholder="Search by book title or author…">
       <button id="search-clear">✕</button>
     </div>
+    <div id="genre-pill-row"></div>
   </div>
 
   <div id="map"></div>
@@ -1319,6 +1352,37 @@ document.getElementById('search-toggle').addEventListener('click', () => {
   else closeSearchResults();
 });
 
+// Genres shown as pills — keep this list in sync with GENRES in extract-titles/index.ts.
+// "Other" is intentionally left off: it's a catch-all bucket for the AI, not something
+// someone would set out to browse for.
+const GENRE_PILLS = [
+  "Fiction", "Mystery & Thriller", "Romance", "Sci-Fi & Fantasy",
+  "Non-Fiction", "Biography & Memoir", "Self-Help", "Children's",
+  "Young Adult", "Cookbooks", "Classics", "Travel",
+];
+const genrePillRow = document.getElementById('genre-pill-row');
+genrePillRow.innerHTML = GENRE_PILLS.map(g =>
+  `<button class="genre-pill" data-genre="${escapeHtml(g)}">${escapeHtml(g)}</button>`
+).join('');
+genrePillRow.querySelectorAll('.genre-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    genrePillRow.querySelectorAll('.genre-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    runGenreSearch(btn.dataset.genre);
+  });
+});
+
+function setSearchMode(mode) {
+  document.getElementById('search-mode-text').classList.toggle('active', mode === 'text');
+  document.getElementById('search-mode-genre').classList.toggle('active', mode === 'genre');
+  document.getElementById('search-input-wrap').style.display = mode === 'text' ? 'flex' : 'none';
+  genrePillRow.classList.toggle('open', mode === 'genre');
+  closeSearchResults();
+  if (mode === 'text') document.getElementById('search-input').focus();
+}
+document.getElementById('search-mode-text').addEventListener('click', () => setSearchMode('text'));
+document.getElementById('search-mode-genre').addEventListener('click', () => setSearchMode('genre'));
+
 function closeSearchResults() {
   document.getElementById('search-results').classList.remove('open');
   clearSearchHighlights();
@@ -1326,6 +1390,28 @@ function closeSearchResults() {
 
 function clearSearchHighlights() {
   libraries.forEach(lib => { if (lib._marker) refreshMarkerStyle(lib); });
+}
+
+// Fetches the MOST RECENT scan per library — older scans may no longer reflect
+// what's actually on the shelf, so they're excluded to avoid sending people on a
+// walk for a book (or genre) that isn't there anymore. Shared by title and genre
+// search. Fetched newest-first, then reduced client-side to one row per library.
+// Move to a Postgres function (DISTINCT ON) once data volume grows.
+async function fetchLatestInventoryPerLibrary() {
+  const { data: allRows, error } = await sb
+    .from('inventories')
+    .select('library_id, titles, genres, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error || !allRows) return null;
+
+  const latestByLibrary = new Map();
+  for (const row of allRows) {
+    if (!latestByLibrary.has(row.library_id)) {
+      latestByLibrary.set(row.library_id, row);
+    }
+  }
+  return Array.from(latestByLibrary.values());
 }
 
 async function runSearch(query) {
@@ -1347,28 +1433,11 @@ async function runSearch(query) {
   metaDiv.textContent = 'Searching…';
   listDiv.innerHTML = '';
 
-  // Fuzzy search against only the MOST RECENT scan per library — older scans may no
-  // longer reflect what's actually on the shelf, so they're excluded from search to
-  // avoid sending people on a walk for a book that isn't there anymore.
-  // Fetched newest-first, then reduced client-side to one row per library_id.
-  // Move to a Postgres function (DISTINCT ON + pg_trgm) once data volume grows.
-  const { data: allRows, error } = await sb
-    .from('inventories')
-    .select('library_id, titles, created_at')
-    .order('created_at', { ascending: false });
-
-  if (error || !allRows) {
+  const data = await fetchLatestInventoryPerLibrary();
+  if (!data) {
     metaDiv.textContent = 'Search failed — please try again.';
     return;
   }
-
-  const latestByLibrary = new Map();
-  for (const row of allRows) {
-    if (!latestByLibrary.has(row.library_id)) {
-      latestByLibrary.set(row.library_id, row);
-    }
-  }
-  const data = Array.from(latestByLibrary.values());
 
   const matches = fuzzyMatchTitles(query, data);
 
@@ -1460,6 +1529,93 @@ async function runSearch(query) {
         map.flyTo([lib.lat, lib.lng], 16, { duration: 0.8 });
         setTimeout(() => openPanel(lib, lib._marker), 500);
       }
+    });
+  });
+}
+
+// Genre search: unlike title search, a "match" is a library whose latest scan
+// contains at least one book tagged with the chosen genre — not a specific title
+// to track across libraries. Result cards list libraries, not titles.
+async function runGenreSearch(genre) {
+  const resultsDiv = document.getElementById('search-results');
+  const listDiv = document.getElementById('search-results-list');
+  const metaDiv = document.getElementById('search-meta');
+  resultsDiv.classList.add('open');
+
+  if (!SUPABASE_ENABLED) {
+    metaDiv.textContent = '';
+    listDiv.innerHTML = `
+      <div class="empty-state">
+        <span class="icon">🔍</span>
+        Search will work once libraries have been scanned and Supabase is connected.
+      </div>`;
+    return;
+  }
+
+  metaDiv.textContent = 'Searching…';
+  listDiv.innerHTML = '';
+
+  const data = await fetchLatestInventoryPerLibrary();
+  if (!data) {
+    metaDiv.textContent = 'Search failed — please try again.';
+    return;
+  }
+
+  const matches = [];
+  data.forEach(row => {
+    const lib = findLibraryByDbId(row.library_id) || libraries.find(l => l.id === row.library_id);
+    if (!lib) return;
+    const genreTitles = (row.titles || []).filter((t, i) => (row.genres || [])[i] === genre);
+    if (genreTitles.length === 0) return;
+    const dist = userLocation ? getDistance(userLocation.lat, userLocation.lng, lib.lat, lib.lng) : null;
+    matches.push({ lib, dist, titles: genreTitles });
+  });
+
+  if (matches.length === 0) {
+    metaDiv.textContent = `No libraries currently show ${genre} books`;
+    listDiv.innerHTML = `
+      <div class="empty-state">
+        <span class="icon">📭</span>
+        No libraries currently show ${genre} books.<br>Try another genre, or check back as more shelves get scanned.
+      </div>`;
+    clearSearchHighlights();
+    return;
+  }
+
+  matches.sort((a, b) => {
+    if (a.dist === null || b.dist === null) return 0;
+    return a.dist - b.dist;
+  });
+
+  metaDiv.textContent = `${matches.length} ${matches.length === 1 ? 'library shows' : 'libraries show'} ${genre}${userLocation ? ' · sorted by distance' : ''}`;
+
+  listDiv.innerHTML = matches.map(m => {
+    const distStr = m.dist !== null
+      ? `<span class="result-loc-dist">${m.dist < 1000 ? Math.round(m.dist) + 'm' : (m.dist/1000).toFixed(1) + 'km'}</span>`
+      : '';
+    const preview = m.titles.slice(0, 3).map(t => escapeHtml(t)).join(', ');
+    const more = m.titles.length > 3 ? ` + ${m.titles.length - 3} more` : '';
+    return `
+      <div class="result-card">
+        <div class="result-title">${escapeHtml(m.lib.name)} ${distStr}</div>
+        <div class="result-match">${m.titles.length} ${genre} book${m.titles.length === 1 ? '' : 's'}</div>
+        <div class="result-locations">${preview}${more}</div>
+      </div>`;
+  }).join('');
+
+  const hitIds = new Set(matches.map(m => dbId(m.lib)));
+  libraries.forEach(lib => {
+    if (lib._marker) lib._marker.setIcon(makeMarkerIcon(lib, false,
+        hitIds.has(lib.id) || (lib._dbId !== undefined && hitIds.has(lib._dbId))));
+  });
+
+  listDiv.querySelectorAll('.result-card').forEach((card, i) => {
+    card.addEventListener('click', () => {
+      const lib = matches[i].lib;
+      document.getElementById('search-bar').classList.remove('open');
+      closeSearchResults();
+      map.flyTo([lib.lat, lib.lng], 16, { duration: 0.8 });
+      setTimeout(() => openPanel(lib, lib._marker), 500);
     });
   });
 }
@@ -1751,7 +1907,9 @@ async function runExtraction(file) {
       extractedTitles = [];
     } else {
       const data = await res.json();
-      extractedTitles = (data.titles || []).map(t => ({ text: t, edited: false }));
+      const titles = data.titles || [];
+      const genres = data.genres || [];
+      extractedTitles = titles.map((t, i) => ({ text: t, edited: false, genre: genres[i] || 'Other' }));
     }
   } catch (err) {
     console.error('Extraction fetch error:', err);
@@ -1891,7 +2049,7 @@ document.getElementById('add-title-btn').addEventListener('click', () => {
   const input = document.getElementById('add-title-input');
   const val = input.value.trim();
   if (!val) return;
-  extractedTitles.push({ text: val, edited: true, addedByUser: true });
+  extractedTitles.push({ text: val, edited: true, addedByUser: true, genre: 'Other' });
   input.value = '';
   renderEditChips();
 });
@@ -1920,13 +2078,20 @@ document.getElementById('btn-save-inventory').addEventListener('click', async ()
     if (upErr) throw upErr;
     const { data: urlData } = sb.storage.from('lll-photos').getPublicUrl(path);
 
-    const titles = extractedTitles.map(t => t.text).filter(Boolean);
+    const titles = [];
+    const genres = [];
+    extractedTitles.forEach(t => {
+      if (!t.text) return;
+      titles.push(t.text);
+      genres.push(t.genre || 'Other');
+    });
     const editedCount = extractedTitles.filter(t => t.edited).length;
 
     const { error: dbErr } = await sb.from('inventories').insert({
       library_id: dbId(activeLibrary),
       photo_url: urlData.publicUrl,
       titles,
+      genres,
       ai_edited_count: editedCount,
       ai_total_count: extractedTitles.length,
       device_id: getDeviceId(),
