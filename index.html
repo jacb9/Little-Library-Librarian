@@ -755,6 +755,7 @@
     <button class="icon-btn amber" id="add-btn" title="Add a library">＋</button>
     <button class="icon-btn" id="stats-btn" title="Your stats">📊</button>
     <button class="icon-btn" id="faq-btn" title="How this works">?</button>
+    <button class="icon-btn" id="about-btn" title="About this project">ℹ️</button>
   </div>
 
   <div id="search-bar">
@@ -997,6 +998,39 @@
     <div class="faq-item">
       <div class="faq-item-label">Where did the library locations come from?</div>
       <div class="faq-item-body">This app started with map location data from the <a href="https://victoriaplacemaking.ca/little-free-libraries/" target="_blank" rel="noopener noreferrer">Greater Victoria Placemaking Network</a>, which has spent years mapping little free libraries across the region. Thanks to them for the head start. From here, inventories and library photos are added by app users like you.</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="about-modal">
+  <div class="modal">
+    <div class="modal-sticky-header">
+      <button class="modal-close" id="about-close">✕</button>
+      <h2>About this project</h2>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-body">A little free library is only useful if you know what's on the shelf before you walk over. Most of the time you don't — the contents change constantly and nobody's keeping track. Little Library Librarian exists to fix that: a map of every little library across Greater Victoria, with real inventories built from photos neighbours take of the actual shelves.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-label">How it works</div>
+      <div class="faq-item-body">There's no staff and no central catalogue — just people like you scanning a shelf when they pass by. AI reads the spines from the photo, you fix anything it got wrong, and that inventory becomes searchable for everyone else. The map only gets better the more people use it.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-label">Who's behind it</div>
+      <div class="faq-item-body">Built by a couple of neighbours here in Victoria who got tired of driving to three libraries hoping one had the book they wanted. It started with location data from the <a href="https://victoriaplacemaking.ca/little-free-libraries/" target="_blank" rel="noopener noreferrer">Greater Victoria Placemaking Network</a> — everything since then, every inventory and box photo, comes from the community.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-label">Your privacy</div>
+      <div class="faq-item-body">No account, no sign-up, no personal information. Your device gets an anonymous ID so we can show you your own stats — that's it.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-item-label">Get in touch</div>
+      <div class="faq-item-body">Found a bug, have an idea, or just want to say hi? Reach out at <a href="mailto:hello@littlelibrarylibrarian.com">hello@littlelibrarylibrarian.com</a>.</div>
     </div>
   </div>
 </div>
@@ -1672,7 +1706,7 @@ async function runExtraction(file) {
   }
 
   try {
-    const base64 = await fileToBase64(file);
+    const images = await buildScanImages(file);
     const res = await fetch(EXTRACTION_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -1680,7 +1714,7 @@ async function runExtraction(file) {
         'apiKey': SUPABASE_ANON_KEY,
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      body: JSON.stringify({ image: base64 }),
+      body: JSON.stringify({ images }),
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -1716,6 +1750,58 @@ async function runExtraction(file) {
   document.getElementById('extract-loading').classList.remove('show');
   document.getElementById('extract-review').classList.add('show');
   renderEditChips();
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function canvasToBase64(canvas, quality = 0.85) {
+  return canvas.toDataURL('image/jpeg', quality).split(',')[1];
+}
+
+// Draws source rect (sx,sy,sw,sh) from img onto a new canvas, scaled down
+// so its long edge doesn't exceed maxDim before it's even sent.
+function cropToBase64(img, sx, sy, sw, sh, maxDim) {
+  const scale = Math.min(1, maxDim / Math.max(sw, sh));
+  const outW = Math.round(sw * scale);
+  const outH = Math.round(sh * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
+  return canvasToBase64(canvas);
+}
+
+const CROP_MAX_DIM = 2000;     // each half-shelf crop's long edge
+const CONTEXT_MAX_DIM = 1200;  // the full-shelf overview, for layout context only
+const OVERLAP_FRACTION = 0.12; // so a spine sitting on the seam isn't cut in half in both crops
+
+// Splits one shelf photo into a full overview + two overlapping half crops
+// (left/right or top/bottom depending on orientation), so narrow spines get
+// more effective pixels per book without asking the user to take extra photos.
+async function buildScanImages(file) {
+  const img = await loadImageFromFile(file);
+  const { naturalWidth: w, naturalHeight: h } = img;
+  const images = [cropToBase64(img, 0, 0, w, h, CONTEXT_MAX_DIM)]; // overview first
+
+  if (w >= h) {
+    const halfW = w / 2, overlap = w * OVERLAP_FRACTION;
+    images.push(cropToBase64(img, 0, 0, halfW + overlap, h, CROP_MAX_DIM));
+    images.push(cropToBase64(img, halfW - overlap, 0, halfW + overlap, h, CROP_MAX_DIM));
+  } else {
+    const halfH = h / 2, overlap = h * OVERLAP_FRACTION;
+    images.push(cropToBase64(img, 0, 0, w, halfH + overlap, CROP_MAX_DIM));
+    images.push(cropToBase64(img, 0, halfH - overlap, w, halfH + overlap, CROP_MAX_DIM));
+  }
+
+  URL.revokeObjectURL(img.src);
+  return images;
 }
 
 function fileToBase64(file) {
@@ -1933,6 +2019,14 @@ document.getElementById('faq-btn').addEventListener('click', () => {
 document.getElementById('faq-close').addEventListener('click', () => {
   document.getElementById('faq-modal').classList.remove('open');
 });
+document.getElementById('about-btn').addEventListener('click', () => {
+  const modal = document.getElementById('about-modal');
+  modal.classList.add('open');
+  requestAnimationFrame(() => { modal.querySelector('.modal').scrollTop = 0; });
+});
+document.getElementById('about-close').addEventListener('click', () => {
+  document.getElementById('about-modal').classList.remove('open');
+});
 document.getElementById('add-close').addEventListener('click', () => {
   document.getElementById('add-modal').classList.remove('open');
 });
@@ -2065,7 +2159,7 @@ document.getElementById('btn-flag').addEventListener('click', () => {
   if (!activeLibrary) return;
   showToast('Problem reported — thanks for flagging this');
 });
-['scan-modal', 'box-photo-modal', 'add-modal', 'faq-modal', 'stats-modal', 'badge-award-modal'].forEach(id => {
+['scan-modal', 'box-photo-modal', 'add-modal', 'faq-modal', 'about-modal', 'stats-modal', 'badge-award-modal'].forEach(id => {
   const el = document.getElementById(id);
   // Stop ALL clicks inside the modal from reaching the map underneath
   el.addEventListener('click', e => {
