@@ -434,9 +434,6 @@
       width: 100%;
       height: 160px;
       object-fit: cover;
-      object-position: top; /* shelf photos usually have the books near the top of frame,
-                                the library's frame/surroundings below — centering was
-                                cropping into the actual books instead of what's around them */
       background: var(--green-pale);
     }
     .inventory-entry-body { padding: 12px 14px; }
@@ -475,7 +472,7 @@
 
     /* Library box photo */
     .box-photo-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 4px; }
-    .box-photo-row img { width: 100px; height: 76px; object-fit: cover; object-position: top; border-radius: 6px; flex-shrink: 0; }
+    .box-photo-row img { width: 100px; height: 76px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
     .box-photo-empty {
       width: 100%; padding: 20px 16px;
       background: var(--ghost-pale);
@@ -1013,7 +1010,7 @@
 
     <div class="faq-item">
       <div class="faq-item-label">To add an inventory</div>
-      <div class="faq-item-body">Tap a pin to open the library. No inventory yet? Tap "<span class="faq-icon-inline">📷 Scan the shelf</span>" and take a photo. We'll read the spines automatically — you can fix anything we got wrong before saving. <em>For best results, step back to get the whole interior in frame — one photo of both shelves beats two close-ups.</em></div>
+      <div class="faq-item-body">Tap a pin to open the library. No inventory yet? Tap "<span class="faq-icon-inline">📷 Scan the shelf</span>" and take a photo. We'll read the spines automatically — you can fix anything we got wrong before saving. <em>For best results, step back to get the whole interior in frame — one photo of both shelves beats two close-ups.</em> Can't fit it all in one shot? After saving, we'll ask if you need a second picture to complete the inventory.</div>
     </div>
 
     <div class="faq-item">
