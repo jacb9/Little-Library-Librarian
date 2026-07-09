@@ -30,9 +30,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Little Library Librarian">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="icon" href="favicon.ico">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" href="/favicon.ico">
   <title>Little Library Librarian · Greater Victoria</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -853,7 +853,7 @@
     </div>
 
     <div id="extract-loading">
-      <img id="extract-loading-avatar" src="icon/avatar.jpg" alt="">
+      <img id="extract-loading-avatar" src="/icon/avatar.jpg" alt="">
       <p id="extract-loading-msg">Sending photo…</p>
     </div>
 
@@ -1102,7 +1102,7 @@
 <div id="toast"></div>
 
 <div id="engagement-banner">
-  <img id="engagement-banner-avatar" src="icon/avatar.jpg" alt="">
+  <img id="engagement-banner-avatar" src="/icon/avatar.jpg" alt="">
   <div id="engagement-banner-text"></div>
   <div id="engagement-banner-actions">
     <button id="engagement-banner-primary"></button>
@@ -1111,6 +1111,42 @@
 </div>
 
 <script>
+// ═════════════════════════════════════════════════════════════
+// MULTI-CITY ROUTING
+// ═════════════════════════════════════════════════════════════
+// Recover the real path after GitHub Pages' 404.html redirect (see /404.html).
+// This must run before anything below reads window.location.pathname.
+(function recoverPathFrom404() {
+  const storedPath = sessionStorage.getItem('lll_path');
+  if (storedPath) {
+    sessionStorage.removeItem('lll_path');
+    history.replaceState(null, '', storedPath);
+  }
+})();
+
+// One entry per live city. To launch a new city: add its entry here, plus a
+// matching /<city>/libraries.json file. Nothing else in this file should need
+// to change. Root-level requests, or any unrecognized path, fall back to
+// DEFAULT_CITY below.
+const CITIES = {
+  greatervictoria: { label: 'Greater Victoria', center: [48.4284, -123.3656], zoom: 13 },
+};
+const DEFAULT_CITY = 'greatervictoria';
+
+function resolveCity() {
+  const seg = window.location.pathname.split('/').filter(Boolean)[0];
+  return (seg && CITIES[seg]) ? seg : DEFAULT_CITY;
+}
+const CURRENT_CITY = resolveCity();
+
+// Header label + browser tab title reflect whichever city was resolved above.
+(function applyCityBranding() {
+  const label = CITIES[CURRENT_CITY].label;
+  const headerSpan = document.querySelector('#header h1 span');
+  if (headerSpan) headerSpan.textContent = label;
+  document.title = `Little Library Librarian · ${label}`;
+})();
+
 // ═════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ═════════════════════════════════════════════════════════════
@@ -1165,7 +1201,8 @@ const CATEGORY_LABEL = {
 // Map
 // ═════════════════════════════════════════════════════════════
 function initMap() {
-  map = L.map('map', { center: [48.4284, -123.3656], zoom: 13, zoomControl: false });
+  const { center, zoom } = CITIES[CURRENT_CITY];
+  map = L.map('map', { center, zoom, zoomControl: false });
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
@@ -2483,7 +2520,7 @@ document.getElementById('btn-submit-new').addEventListener('click', async () => 
   btn.disabled = true;
   try {
     const { data: libData, error: libErr } = await sb.from('libraries_user_added').insert({
-      name, category, lat: newLibraryLatLng.lat, lng: newLibraryLatLng.lng,
+      name, category, lat: newLibraryLatLng.lat, lng: newLibraryLatLng.lng, city: CURRENT_CITY,
     }).select().single();
     if (libErr) throw libErr;
 
@@ -2616,7 +2653,7 @@ function incrementShareCount() {
 
 function doShare() {
   const message = "Love little free libraries like me? This app makes them searchable — the more of us scanning, the more books turn up. Join me?";
-  const link = 'https://littlelibrarylibrarian.com';
+  const link = `https://littlelibrarylibrarian.com/${CURRENT_CITY}/`;
   // Some share targets (Mail apps especially) ignore the separate `text` and/or `title`
   // fields and only keep `url`. Folding everything into one string makes the message
   // survive in those apps too, since it's more likely to land wherever the app puts the body.
@@ -2647,22 +2684,22 @@ function promptInstall() {
 // Called once per successful inventory save
 const BADGES = {
   libraries: [
-    { threshold: 5, file: 'icon/5-libraries.png', label: '5 Libraries Scanned' },
-    { threshold: 10, file: 'icon/10-libraries.png', label: '10 Libraries Scanned' },
-    { threshold: 25, file: 'icon/25-libraries.png', label: '25 Libraries Scanned' },
-    { threshold: 50, file: 'icon/50-libraries.png', label: '50 Libraries Scanned' },
+    { threshold: 5, file: '/icon/5-libraries.png', label: '5 Libraries Scanned' },
+    { threshold: 10, file: '/icon/10-libraries.png', label: '10 Libraries Scanned' },
+    { threshold: 25, file: '/icon/25-libraries.png', label: '25 Libraries Scanned' },
+    { threshold: 50, file: '/icon/50-libraries.png', label: '50 Libraries Scanned' },
   ],
   books: [
-    { threshold: 100, file: 'icon/100-books.png', label: '100 Books Catalogued' },
-    { threshold: 250, file: 'icon/250-books.png', label: '250 Books Catalogued' },
-    { threshold: 500, file: 'icon/500-books.png', label: '500 Books Catalogued' },
-    { threshold: 1000, file: 'icon/1000-books.png', label: '1,000 Books Catalogued' },
+    { threshold: 100, file: '/icon/100-books.png', label: '100 Books Catalogued' },
+    { threshold: 250, file: '/icon/250-books.png', label: '250 Books Catalogued' },
+    { threshold: 500, file: '/icon/500-books.png', label: '500 Books Catalogued' },
+    { threshold: 1000, file: '/icon/1000-books.png', label: '1,000 Books Catalogued' },
   ],
   shares: [
-    { threshold: 1, file: 'icon/1-share.png', label: 'First Share' },
-    { threshold: 5, file: 'icon/5-share.png', label: '5 Shares' },
-    { threshold: 10, file: 'icon/10-share.png', label: '10 Shares' },
-    { threshold: 25, file: 'icon/25-share.png', label: '25 Shares' },
+    { threshold: 1, file: '/icon/1-share.png', label: 'First Share' },
+    { threshold: 5, file: '/icon/5-share.png', label: '5 Shares' },
+    { threshold: 10, file: '/icon/10-share.png', label: '10 Shares' },
+    { threshold: 25, file: '/icon/25-share.png', label: '25 Shares' },
   ],
 };
 
@@ -2886,6 +2923,7 @@ async function loadUserAddedLibraries() {
   const { data, error } = await sb
     .from('libraries_user_added')
     .select('*')
+    .eq('city', CURRENT_CITY)
     .order('created_at', { ascending: true });
   if (error || !data) return;
 
@@ -2908,10 +2946,10 @@ async function loadUserAddedLibraries() {
 async function boot() {
   initMap();
   try {
-    const res = await fetch('libraries.json');
+    const res = await fetch(`/${CURRENT_CITY}/libraries.json`);
     libraries = await res.json();
   } catch (e) {
-    console.error('Could not load libraries.json', e);
+    console.error(`Could not load /${CURRENT_CITY}/libraries.json`, e);
     libraries = [];
   }
   await loadUserAddedLibraries();
@@ -2945,7 +2983,7 @@ boot();
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
       reg.update(); // actively check for a newer sw.js on every load, rather than waiting on the browser's own ~24hr cycle
     }).catch(() => {});
   });
