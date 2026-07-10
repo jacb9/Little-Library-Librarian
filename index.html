@@ -1,5 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
+<head><!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -981,6 +983,35 @@
   </div>
 </div>
 
+<!-- iOS install instructions modal — iOS has no programmatic install prompt (no
+     beforeinstallprompt support on any iOS browser), so this walks the person
+     through the manual Share-sheet steps instead of a toast that disappears
+     before they can act on it. -->
+<div class="modal-backdrop" id="ios-install-modal">
+  <div class="modal">
+    <button class="modal-close" id="ios-install-close">✕</button>
+    <h2>Add to your Home Screen</h2>
+    <p class="sub" style="background:#fdf3dc; border:1.5px solid var(--amber); border-radius:8px; padding:10px 12px; color:var(--ink); line-height:1.45;">
+      Opened this from a text message or Instagram? Tap the <strong>•••</strong> or <strong>Safari</strong> icon at the top of the screen first, to open this page in your browser — Add to Home Screen won't appear otherwise.
+    </p>
+
+    <div class="faq-item">
+      <div class="faq-item-label">1. Tap the Share icon 📤</div>
+      <div class="faq-item-body">In Safari it's at the bottom of the screen. In Chrome or Edge, it's near the address bar at the top.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-item-label">2. Scroll down</div>
+      <div class="faq-item-body">Find and tap "Add to Home Screen" in the list.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-item-label">3. Tap "Add"</div>
+      <div class="faq-item-body">The icon lands on your Home Screen — tap it any time to open the app directly, no browser needed.</div>
+    </div>
+
+    <button class="btn-primary" id="ios-install-ok" style="width:100%; margin-top:6px;">Got it</button>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="faq-modal">
   <div class="modal">
     <div class="modal-sticky-header">
@@ -1181,6 +1212,7 @@ let secondPhotoAppendContext = null; // set while capturing a 2nd photo for an a
 let pendingBoxPhoto = null;
 let extractedTitles = [];          // current editable list in scan modal
 let newLibraryLatLng = null;
+let nudgeShownThisSession = false; // true once either install nudge (first-scan or recurring) has shown this session
 
 const CATEGORY_EMOJI = {
   'Little Free Libraries': '📚',
@@ -2565,7 +2597,7 @@ document.getElementById('btn-flag').addEventListener('click', () => {
   if (!activeLibrary) return;
   showToast('Problem reported — thanks for flagging this');
 });
-['scan-modal', 'box-photo-modal', 'add-modal', 'faq-modal', 'about-modal', 'stats-modal', 'badge-award-modal'].forEach(id => {
+['scan-modal', 'box-photo-modal', 'add-modal', 'faq-modal', 'about-modal', 'stats-modal', 'badge-award-modal', 'ios-install-modal'].forEach(id => {
   const el = document.getElementById(id);
   // Stop ALL clicks inside the modal from reaching the map underneath
   el.addEventListener('click', e => {
@@ -2670,15 +2702,71 @@ function doShare() {
   }
 }
 
+// Routes to the right install surface for the platform: iOS gets the instruction
+// modal (no programmatic prompt exists on iOS, on any browser), everyone else
+// gets the engagement banner wired to promptInstall(), which uses Chrome's real
+// native install dialog when available.
+function showInstallNudge() {
+  if (isStandalone()) return; // safety net — should already be filtered upstream
+  if (isIOS()) {
+    openIOSInstallModal();
+  } else {
+    showEngagementBanner({
+      text: 'Add this to your home screen so it\'s one tap away next time.',
+      actionLabel: 'Add to home screen',
+      onAction: promptInstall,
+    });
+  }
+}
+
+function openIOSInstallModal() {
+  document.getElementById('ios-install-modal').classList.add('open');
+  if (typeof gtag === 'function') gtag('event', 'ios_install_modal_shown');
+}
+document.getElementById('ios-install-close').addEventListener('click', () => {
+  document.getElementById('ios-install-modal').classList.remove('open');
+});
+document.getElementById('ios-install-ok').addEventListener('click', () => {
+  document.getElementById('ios-install-modal').classList.remove('open');
+});
+
 function promptInstall() {
   if (deferredInstallPrompt) {
     deferredInstallPrompt.prompt();
     deferredInstallPrompt.userChoice.finally(() => { deferredInstallPrompt = null; });
   } else if (isIOS()) {
-    showToast('Tap the Share icon below, then "Add to Home Screen"');
+    openIOSInstallModal();
   } else {
     showToast('Look for "Add to Home Screen" or "Install" in your browser menu');
   }
+}
+
+// Recurring install nudge — independent of scanning. Fires on the 2nd visit,
+// then every 3rd visit after that (2, 5, 8, 11…), capped at a small lifetime
+// total so it never reads as nagging. Suppressed the moment isStandalone() is
+// true, and suppressed for the rest of a session once ANY install nudge
+// (this one, or the first-scan one in showPostScanNudge) has already shown —
+// see nudgeShownThisSession.
+const INSTALL_NUDGE_LIFETIME_CAP = 4;
+
+function incrementVisitCount() {
+  const n = parseInt(localStorage.getItem('lll_visit_count') || '0', 10) + 1;
+  localStorage.setItem('lll_visit_count', String(n));
+  return n;
+}
+
+function maybeShowRecurringInstallNudge(visitCount) {
+  if (isStandalone()) return;
+  if (nudgeShownThisSession) return;
+  const nudgeCount = parseInt(localStorage.getItem('lll_install_nudge_count') || '0', 10);
+  if (nudgeCount >= INSTALL_NUDGE_LIFETIME_CAP) return;
+  const shouldFire = visitCount === 2 || (visitCount > 2 && (visitCount - 2) % 3 === 0);
+  if (!shouldFire) return;
+  nudgeShownThisSession = true;
+  localStorage.setItem('lll_install_nudge_count', String(nudgeCount + 1));
+  // Delayed so this doesn't compete with the boot-time "N libraries on the map"
+  // and "books found so far" toasts (which fire at 0 and 3000ms) for attention.
+  setTimeout(showInstallNudge, 6000);
 }
 
 // Called once per successful inventory save
@@ -2732,15 +2820,18 @@ function recordScanAndGetCount(bookCountThisScan) {
   return { scanCount, bookCount, newBadges };
 }
 
+// First-scan install nudge fires exactly once ever, right after someone's very
+// first successful scan — the highest-intent moment available, since they've
+// just watched the AI actually read their shelf. Independent of, and can be
+// blocked by, the recurring visit-based nudge above via nudgeShownThisSession —
+// whichever fires first in a session wins, so nobody ever sees two install asks
+// back to back. A first scan happening in a LATER session (recurring nudge
+// already having fired in an earlier one) still fires fresh, since the flag
+// only lives for the current session.
 function showPostScanNudge(count) {
-  const isInstalled = localStorage.getItem('lll_installed') === '1';
-  if (count === 1 && !isInstalled && !localStorage.getItem('lll_install_prompted')) {
-    localStorage.setItem('lll_install_prompted', '1');
-    showEngagementBanner({
-      text: 'Nice first scan! Add this to your home screen so it\'s one tap away next time.',
-      actionLabel: 'Add to home screen',
-      onAction: promptInstall,
-    });
+  if (count === 1 && !isStandalone() && !nudgeShownThisSession) {
+    nudgeShownThisSession = true;
+    showInstallNudge();
     return;
   }
   if (count === 2) {
@@ -2944,6 +3035,8 @@ async function loadUserAddedLibraries() {
 }
 
 async function boot() {
+  const visitCount = incrementVisitCount();
+
   initMap();
   try {
     const res = await fetch(`/${CURRENT_CITY}/libraries.json`);
@@ -2959,6 +3052,8 @@ async function boot() {
   document.getElementById('loading').classList.add('done');
   setTimeout(() => document.getElementById('loading').remove(), 500);
   showToast(`${libraries.length} libraries on the map`);
+
+  maybeShowRecurringInstallNudge(visitCount);
 
   setTimeout(async () => {
     const bookCount = await getGlobalBookCount();
